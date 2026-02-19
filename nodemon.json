@@ -1,0 +1,31 @@
+{
+  "watch": ["src"],
+  "ext": "js,json",
+  "ignore": [
+    "src/serviceAccountKey.json",
+    "src/**/cards/**",
+    "src/**/tmp/**",
+    "src/**/temp/**",
+    "src/**/logs/**",
+    "src/**/uploads/**",
+    "src/**/downloads/**",
+    "src/**/.cache/**",
+    "cards/**",
+    "tmp/**",
+    "temp/**",
+    "logs/**",
+    "uploads/**",
+    "downloads/**",
+    ".cache/**",
+    "**/*.png",
+    "**/*.jpg",
+    "**/*.jpeg",
+    "**/*.webp",
+    "**/*.gif",
+    "**/*.pdf",
+    "node_modules/**"
+  ],
+  "delay": 500,
+  "signal": "SIGTERM",
+  "verbose": false
+}

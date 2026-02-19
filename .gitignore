@@ -1,0 +1,53 @@
+# -------------------------
+# Secrets / Environment
+# -------------------------
+.env
+.env.*
+!.env.example
+
+# -------------------------
+# Service account keys (Firebase)
+# -------------------------
+src/serviceAccountKey.json
+**/serviceAccountKey.json
+
+# -------------------------
+# Dependencies
+# -------------------------
+node_modules/
+
+# -------------------------
+# Logs
+# -------------------------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# -------------------------
+# Local data files
+# -------------------------
+local-db.json
+
+# -------------------------
+# SQLite (if used)
+# -------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# If you create a folder for DB
+data/
+db/
+
+# -------------------------
+# OS / Editor
+# -------------------------
+.DS_Store
+.idea/
+.vscode/

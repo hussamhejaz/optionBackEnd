@@ -1,0 +1,102 @@
+const { db, admin } = require('../database');
+
+const tradesCol = db.collection('trades');
+const reportsCol = db.collection('reports');
+
+// Helper function to create timestamp from date (works with both Firestore and local DB)
+function createTimestampFromDate(date) {
+  if (admin && admin.firestore) {
+    return admin.firestore.Timestamp.fromDate(date);
+  }
+  // For local DB, return a simple timestamp object
+  return {
+    toDate: () => date,
+    toMillis: () => date.getTime(),
+    seconds: Math.floor(date.getTime() / 1000),
+    nanoseconds: 0
+  };
+}
+
+function startOfDayUTC(date) {
+  return createTimestampFromDate(
+    new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+  );
+}
+
+async function dashboardSummary(req, res, next) {
+  try {
+    // Open / closed counts
+    const [openSnap, closedSnap] = await Promise.all([
+      tradesCol.where('status', '==', 'OPEN').get(),
+      tradesCol.where('status', '==', 'CLOSED').get(),
+    ]);
+
+    const openCount = openSnap.size;
+    const closedCount = closedSnap.size;
+
+    // P&L + win/loss from reports (closed trades)
+    const reports = await reportsCol.get();
+    let netProfit = 0;
+    let wins = 0;
+    let losses = 0;
+    reports.forEach((doc) => {
+      const d = doc.data();
+      const pnl = Number(d.pnlAmount) || 0;
+      netProfit += pnl;
+      if (pnl > 0) wins += 1;
+      else if (pnl < 0) losses += 1;
+    });
+    const totalClosed = wins + losses;
+    const winRate = totalClosed ? Number(((wins / totalClosed) * 100).toFixed(2)) : 0;
+
+    // Weekly profit trend (last 7 days, inclusive)
+    const now = new Date();
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now);
+      d.setUTCDate(now.getUTCDate() - i);
+      const dayStart = startOfDayUTC(d);
+      const dayEnd = startOfDayUTC(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)));
+      days.push({ label: d.toLocaleDateString('en-US', { weekday: 'short' }), start: dayStart, end: dayEnd });
+    }
+
+    const weeklyBuckets = days.map((d) => ({ label: d.label, value: 0 }));
+    const reportDocs = reports.docs;
+    reportDocs.forEach((doc) => {
+      const data = doc.data();
+      const ts = data.closedAt;
+      if (!ts?.toDate) return;
+      const date = ts.toDate();
+      const utc = date.getTime();
+      weeklyBuckets.forEach((bucket, idx) => {
+        const { start, end } = days[idx];
+        if (utc >= start.toMillis() && utc < end.toMillis()) {
+          bucket.value += Number(data.pnlAmount) || 0;
+        }
+      });
+    });
+
+    res.json({
+      netProfit,
+      winRate,
+      openCount,
+      closedCount,
+      winCount: wins,
+      lossCount: losses,
+      weeklyProfit: weeklyBuckets,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Placeholder reset endpoint (no-op, kept for future cache invalidation)
+async function resetDashboard(req, res, next) {
+  try {
+    res.json({ success: true, message: 'Dashboard reset (no cached state to clear).' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { dashboardSummary, resetDashboard };
