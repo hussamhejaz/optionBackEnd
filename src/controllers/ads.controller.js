@@ -26,6 +26,10 @@ function toFiniteNumberOrNull(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+function meetsMinAdProfitPercent(ad) {
+  return Number(ad?.pnlPercent) >= MIN_AD_PROFIT_PERCENT;
+}
+
 function toMillis(ts) {
   if (!ts) return 0;
   if (typeof ts.toMillis === 'function') return ts.toMillis();
@@ -282,7 +286,10 @@ async function createAd(req, res, next) {
 async function listAds(req, res, next) {
   try {
     const snap = await adsCol.orderBy('createdAt', 'desc').get();
-    res.json(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    const ads = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((ad) => meetsMinAdProfitPercent(ad));
+    res.json(ads);
   } catch (err) {
     next(err);
   }
@@ -393,6 +400,9 @@ async function sendAdToTelegram(req, res, next) {
     const adDoc = await adsCol.doc(id).get();
     if (!adDoc.exists) return res.status(404).json({ message: 'Ad not found' });
     const ad = adDoc.data();
+    if (!meetsMinAdProfitPercent(ad)) {
+      return res.status(400).json({ message: 'Ad profit percent must be 50% or higher' });
+    }
     let adForSend = { ...ad };
 
     if (
