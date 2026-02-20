@@ -113,7 +113,7 @@ function headerSvg({ x, y, width, symbol, strike, expiration, right, logoDataUrl
     <text x="${x + 56 + Math.max(0, dateText.length * 20)}" y="${y + 118}" fill="${rightColor}" font-size="36" font-weight="500" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(rightText)}</text>
     ${candleSvg(x + width / 2 - 48, y + 45, 0.75)}
     ${logoDataUrl
-      ? `<image href="${logoDataUrl}" x="${x + width - 250 - 60}" y="${y + 16}" width="250" preserveAspectRatio="xMidYMid meet"/>`
+      ? `<image href="${logoDataUrl}" x="${x + width - 250 - 60}" y="${y + 16}" width="250" height="118" preserveAspectRatio="xMidYMid meet"/>`
       : `<text x="${x + width - 280}" y="${y + 80}" fill="${accent}" font-size="56" font-weight="700" font-family="DejaVu Sans, Arial, sans-serif">TRADER</text>`}
     <line x1="${x}" y1="${y + 150}" x2="${x + width}" y2="${y + 150}" stroke="${accent}" stroke-width="4"/>
   `;
@@ -166,7 +166,7 @@ function footerSvg({ x, y, width, pnlValue, pnlPct, expiration, right, logoDataU
     <text x="${leftCenterX - 18}" y="${y + 112}" fill="${rightColor}" font-size="36" font-weight="500" text-anchor="start" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(rightText)}</text>
     ${candleSvg(x + width / 2 - 48, y + 26, 0.75)}
     ${logoDataUrl
-      ? `<image href="${logoDataUrl}" x="${x + width - 250 - 60}" y="${y + 8}" width="250" preserveAspectRatio="xMidYMid meet"/>`
+      ? `<image href="${logoDataUrl}" x="${x + width - 250 - 60}" y="${y + 8}" width="250" height="109" preserveAspectRatio="xMidYMid meet"/>`
       : `<text x="${x + width - 280}" y="${y + 70}" fill="${accent}" font-size="56" font-weight="700" font-family="DejaVu Sans, Arial, sans-serif">TRADER</text>`}
   `;
 }

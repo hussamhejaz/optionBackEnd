@@ -134,8 +134,14 @@ function drawHeader(ctx, { x, y, width, symbol, strike, expiration, right, logo 
   drawCandleIcon(ctx, x + width / 2 - 48, y + 45, 0.75);
 
   if (logo) {
-    const logoW = 250;
-    const logoH = (logo.height / logo.width) * logoW;
+    const maxLogoW = 250;
+    const maxLogoH = 118;
+    let logoW = maxLogoW;
+    let logoH = (logo.height / logo.width) * logoW;
+    if (logoH > maxLogoH) {
+      logoH = maxLogoH;
+      logoW = (logo.width / logo.height) * logoH;
+    }
     ctx.drawImage(logo, x + width - logoW - 60, y + 16, logoW, logoH);
   } else {
     drawWordmarkFallback(ctx, x + width - 280, y + 80);
@@ -258,8 +264,14 @@ function drawFooter(ctx, { x, y, width, pnlValue, pnlPct, expiration, right, log
   drawCandleIcon(ctx, x + width / 2 - 48, y + 26, 0.75);
 
   if (logo) {
-    const logoW = 250;
-    const logoH = (logo.height / logo.width) * logoW;
+    const maxLogoW = 250;
+    const maxLogoH = 109;
+    let logoW = maxLogoW;
+    let logoH = (logo.height / logo.width) * logoW;
+    if (logoH > maxLogoH) {
+      logoH = maxLogoH;
+      logoW = (logo.width / logo.height) * logoH;
+    }
     ctx.drawImage(logo, x + width - logoW - 60, y + 8, logoW, logoH);
   } else {
     ctx.fillStyle = accent;
