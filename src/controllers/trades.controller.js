@@ -599,6 +599,9 @@ async function updateStopLoss(req, res, next) {
 
 async function getWinningTrades(req, res, next) {
   try {
+    const minPnlQuery = Number(req.query?.minPnl);
+    const minPnl = Number.isFinite(minPnlQuery) ? minPnlQuery : 50;
+
     // Fetch closed trades and reports, then merge so report-only winners are not lost.
     const [snap, reportsSnap] = await Promise.all([
       collection.where('status', '==', 'CLOSED').get(),
@@ -622,7 +625,9 @@ async function getWinningTrades(req, res, next) {
 
       // Trade qualifies if marked successful or has positive PnL.
       const isSuccessful = Boolean(trade.isSuccessful);
-      if (!isSuccessful && Number(trade.pnl || 0) <= 0) return;
+      const pnlValue = Number(trade.pnl || 0);
+      if (!isSuccessful && pnlValue <= 0) return;
+      if (pnlValue < minPnl) return;
 
       // Only include trades with valid symbol and strike
       const symbol = String(trade.symbol || '').trim().toUpperCase();
@@ -646,7 +651,7 @@ async function getWinningTrades(req, res, next) {
       }
 
       const existing = winnersById.get(trade.id);
-      if (!existing || Number(trade.pnl || 0) >= Number(existing.pnl || 0)) {
+      if (!existing || pnlValue >= Number(existing.pnl || 0)) {
         winnersById.set(trade.id, trade);
       }
     };
