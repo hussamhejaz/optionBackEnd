@@ -420,53 +420,63 @@ async function renderTradeCardPNG({
   logoBuffer,
   variant = 'default',
 }) {
-  const isWinningAd = variant === 'winning-ad';
-  const width = 1080;
+  try {
+    const isWinningAd = variant === 'winning-ad';
+    const width = 1080;
 
-  const defaultHeight = 600; // ✅ أصغر للصفقة الجديدة
-  const winningHeight = 1140; // ✅ إعلان مضغوط
+    const defaultHeight = 600; // ✅ أصغر للصفقة الجديدة
+    const winningHeight = 1140; // ✅ إعلان مضغوط
 
-  const height = isWinningAd ? winningHeight : defaultHeight;
+    const height = isWinningAd ? winningHeight : defaultHeight;
 
-  const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext('2d');
-  const logo = await tryLoadLogo(logoBuffer);
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    const logo = await tryLoadLogo(logoBuffer);
 
-  if (isWinningAd) {
-    renderWinningAdCard(ctx, {
-      width,
-      height,
-      symbol,
-      strike,
-      expiration,
-      right,
-      entryPrice,
-      mid,
-      openInterest,
-      volume,
-      pnlValue,
-      pnlPct,
-      logo,
-    });
-  } else {
-    renderDefaultCard(ctx, {
-      width,
-      height,
-      symbol,
-      strike,
-      expiration,
-      right,
-      mid,
-      openInterest,
-      volume,
-      pnlValue,
-      pnlPct,
-      
-      logo,
-    });
+    if (isWinningAd) {
+      renderWinningAdCard(ctx, {
+        width,
+        height,
+        symbol,
+        strike,
+        expiration,
+        right,
+        entryPrice,
+        mid,
+        openInterest,
+        volume,
+        pnlValue,
+        pnlPct,
+        logo,
+      });
+    } else {
+      renderDefaultCard(ctx, {
+        width,
+        height,
+        symbol,
+        strike,
+        expiration,
+        right,
+        mid,
+        openInterest,
+        volume,
+        pnlValue,
+        pnlPct,
+        
+        logo,
+      });
+    }
+
+    const buffer = canvas.toBuffer('image/png');
+    console.log(`[CARD_RENDER] PNG size: ${buffer.length} bytes (${variant})`);
+    if (buffer.length < 5000) {
+      console.warn('[CARD_RENDER] PNG too small; canvas dependencies likely missing');
+    }
+    return buffer;
+  } catch (err) {
+    console.error('[CARD_RENDER] Failed to render card PNG:', err.message);
+    throw err;
   }
-
-  return canvas.toBuffer('image/png');
 }
 
 module.exports = { renderTradeCardPNG };

@@ -36,30 +36,43 @@ async function sendTelegramMessage(text, options = {}) {
   }
 }
 
-async function sendTelegramPhoto({ caption, imageBuffer, chatId: chatIdOverride, token: tokenOverride }) {
-  const token = tokenOverride || defaultToken;
-  const chatId = chatIdOverride || defaultChatId;
-  if (!token || !chatId) {
-    console.warn('Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)');
-    return;
+async function sendTelegramPhoto({
+  botToken,
+  chatId,
+  photoBuffer,
+  caption,
+  // Backward-compatible aliases used by existing callers in this codebase:
+  imageBuffer,
+  token: tokenOverride,
+} = {}) {
+  const token = botToken || tokenOverride || defaultToken;
+  const resolvedChatId = chatId || defaultChatId;
+  const resolvedPhotoBuffer = photoBuffer || imageBuffer;
+
+  if (!token || !resolvedChatId) {
+    throw new Error('Telegram not configured (missing bot token or chat id)');
   }
+  if (!resolvedPhotoBuffer || !Buffer.isBuffer(resolvedPhotoBuffer)) {
+    throw new Error('sendTelegramPhoto requires a valid PNG buffer');
+  }
+
   const url = `https://api.telegram.org/bot${token}/sendPhoto`;
   const form = new FormData();
-  form.append('chat_id', chatId);
+  form.append('chat_id', resolvedChatId);
   if (caption) form.append('caption', caption);
-  form.append('photo', imageBuffer, { filename: 'card.png', contentType: 'image/png' });
+  form.append('photo', resolvedPhotoBuffer, { filename: 'card.png', contentType: 'image/png' });
 
-  try {
-    const res = await fetch(url, { method: 'POST', body: form });
-    const body = await res.json().catch(() => ({}));
-    if (res.ok && body?.ok) {
-      return body;
-    } else {
-      console.error('Telegram photo failed:', body || res.statusText);
-    }
-  } catch (err) {
-    console.error('Telegram photo failed:', err.message);
-  }
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: form.getHeaders(),
+    body: form,
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.ok && body?.ok) return body;
+
+  throw new Error(
+    `Telegram sendPhoto failed (${res.status}): ${JSON.stringify(body || res.statusText)}`
+  );
 }
 
 module.exports = { sendTelegramMessage, sendTelegramPhoto };

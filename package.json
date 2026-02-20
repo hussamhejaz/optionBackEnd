@@ -5,7 +5,9 @@
   "license": "MIT",
   "scripts": {
     "dev": "nodemon --config nodemon.json src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "health:canvas": "node scripts/healthCanvas.js",
+    "test:card": "node scripts/testCard.js"
   },
   "dependencies": {
     "axios": "^1.7.7",

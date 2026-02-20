@@ -93,6 +93,7 @@ if (useEmulator) {
   appOptions.projectId = projectId;
 }
 
+
 if (!admin.apps.length) {
   admin.initializeApp(appOptions);
 }
