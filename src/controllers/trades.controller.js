@@ -260,24 +260,32 @@ async function createTrade(req, res, next) {
     void (async () => {
       try {
         if (ENABLE_TELEGRAM_IMAGE) {
-          const card = await renderTradeCardPNG({
-            symbol: payload.symbol,
-            strike: payload.strike,
-            expiration: payload.expiration,
-            right: payload.right,
-            entryPrice: payload.entryPrice,
-            mid: payload.entryPrice,
-            openInterest: toFiniteNumberOrNull(openInterest),
-            volume: toFiniteNumberOrNull(volume),
-            pnlValue: 0,
-            pnlPct: 0,
-          });
-          await sendTelegramPhoto({
-            caption: creationText,
-            imageBuffer: card,
-            chatId: TELEGRAM_CHAT_ID_TRADES,
-            token: TELEGRAM_BOT_TOKEN_TRADES,
-          });
+          try {
+            const card = await renderTradeCardPNG({
+              symbol: payload.symbol,
+              strike: payload.strike,
+              expiration: payload.expiration,
+              right: payload.right,
+              entryPrice: payload.entryPrice,
+              mid: payload.entryPrice,
+              openInterest: toFiniteNumberOrNull(openInterest),
+              volume: toFiniteNumberOrNull(volume),
+              pnlValue: 0,
+              pnlPct: 0,
+            });
+            await sendTelegramPhoto({
+              caption: creationText,
+              imageBuffer: card,
+              chatId: TELEGRAM_CHAT_ID_TRADES,
+              token: TELEGRAM_BOT_TOKEN_TRADES,
+            });
+          } catch (photoErr) {
+            console.error(`Telegram image send failed (new trade) for ${tradeId}:`, photoErr.message);
+            await sendTelegramMessage(creationText, {
+              chatId: TELEGRAM_CHAT_ID_TRADES,
+              token: TELEGRAM_BOT_TOKEN_TRADES,
+            });
+          }
         } else {
           await sendTelegramMessage(creationText, {
             chatId: TELEGRAM_CHAT_ID_TRADES,

@@ -163,24 +163,32 @@ async function processTrade(doc) {
               : milestoneText;
 
         if (ENABLE_TELEGRAM_IMAGE) {
-          const cardBuffer = await renderTradeCardPNG({
-            symbol,
-            strike,
-            expiration,
-            right,
-            entryPrice: entry,
-            mid,
-            openInterest: toFiniteNumberOrNull(stats.openInterest),
-            volume: toFiniteNumberOrNull(stats.volume),
-            pnlValue: shouldSendMilestoneAlert ? pnlAmount : mid - entry,
-            pnlPct: entry ? ((mid - entry) / entry) * 100 : 0,
-          });
-          await sendTelegramPhoto({
-            caption: mergedCaption,
-            imageBuffer: cardBuffer,
-            chatId: TELEGRAM_CHAT_ID_TRADES,
-            token: TELEGRAM_BOT_TOKEN_TRADES,
-          });
+          try {
+            const cardBuffer = await renderTradeCardPNG({
+              symbol,
+              strike,
+              expiration,
+              right,
+              entryPrice: entry,
+              mid,
+              openInterest: toFiniteNumberOrNull(stats.openInterest),
+              volume: toFiniteNumberOrNull(stats.volume),
+              pnlValue: shouldSendMilestoneAlert ? pnlAmount : mid - entry,
+              pnlPct: entry ? ((mid - entry) / entry) * 100 : 0,
+            });
+            await sendTelegramPhoto({
+              caption: mergedCaption,
+              imageBuffer: cardBuffer,
+              chatId: TELEGRAM_CHAT_ID_TRADES,
+              token: TELEGRAM_BOT_TOKEN_TRADES,
+            });
+          } catch (photoErr) {
+            console.error('Telegram image send failed (watcher):', photoErr.message);
+            await sendTelegramMessage(mergedText, {
+              chatId: TELEGRAM_CHAT_ID_TRADES,
+              token: TELEGRAM_BOT_TOKEN_TRADES,
+            });
+          }
         } else {
           await sendTelegramMessage(mergedText, {
             chatId: TELEGRAM_CHAT_ID_TRADES,

@@ -1,7 +1,7 @@
 const { db, admin } = require('../database');
 const { requireFields } = require('../utils/validators');
 const { renderTradeCardPNG } = require('../services/cardRenderer');
-const { sendTelegramPhoto } = require('../services/telegramService');
+const { sendTelegramPhoto, sendTelegramMessage } = require('../services/telegramService');
 const { getOptionContractStats } = require('../services/thetaClient');
 const TELEGRAM_CHAT_ID_ADS = process.env.TELEGRAM_CHAT_ID_ADS || process.env.TELEGRAM_CHAT_ID;
 const TELEGRAM_BOT_TOKEN_ADS = process.env.TELEGRAM_BOT_TOKEN_ADS || process.env.TELEGRAM_BOT_TOKEN;
@@ -185,26 +185,44 @@ async function buildWinningAdFromTrade({ tradeId, title }) {
 }
 
 async function sendAdCardToTelegram(ad) {
-  const card = await renderTradeCardPNG({
-    symbol: ad.symbol,
-    strike: ad.strike,
-    expiration: ad.expiration,
-    right: ad.right,
-    entryPrice: toFiniteNumberOrNull(ad.entryPrice) ?? 0,
-    mid: toFiniteNumberOrNull(ad.closePrice ?? ad.entryPrice) ?? 0,
-    openInterest: toFiniteNumberOrNull(ad.openInterest),
-    volume: toFiniteNumberOrNull(ad.volume),
-    pnlValue: Number.isFinite(Number(ad.pnlAmount)) ? Number(ad.pnlAmount) : 0,
-    pnlPct: Number.isFinite(Number(ad.pnlPercent)) ? Number(ad.pnlPercent) : 0,
-    variant: 'winning-ad',
-  });
+  const textFallback =
+    `🏆 صفقة رابحة\n` +
+    `الرمز: ${ad.symbol}\n` +
+    `النوع: ${String(ad.right || '').toUpperCase()}\n` +
+    `السترايك: ${ad.strike}\n` +
+    `التاريخ: ${ad.expiration}\n` +
+    `الدخول: ${ad.entryPrice ?? 'n/a'}\n` +
+    `الإغلاق: ${ad.closePrice ?? 'n/a'}\n` +
+    `الربح: ${ad.pnlAmount ?? 'n/a'} (${ad.pnlPercent ?? 'n/a'}%)`;
 
-  await sendTelegramPhoto({
-    caption: null,
-    imageBuffer: card,
-    chatId: TELEGRAM_CHAT_ID_ADS,
-    token: TELEGRAM_BOT_TOKEN_ADS,
-  });
+  try {
+    const card = await renderTradeCardPNG({
+      symbol: ad.symbol,
+      strike: ad.strike,
+      expiration: ad.expiration,
+      right: ad.right,
+      entryPrice: toFiniteNumberOrNull(ad.entryPrice) ?? 0,
+      mid: toFiniteNumberOrNull(ad.closePrice ?? ad.entryPrice) ?? 0,
+      openInterest: toFiniteNumberOrNull(ad.openInterest),
+      volume: toFiniteNumberOrNull(ad.volume),
+      pnlValue: Number.isFinite(Number(ad.pnlAmount)) ? Number(ad.pnlAmount) : 0,
+      pnlPct: Number.isFinite(Number(ad.pnlPercent)) ? Number(ad.pnlPercent) : 0,
+      variant: 'winning-ad',
+    });
+
+    await sendTelegramPhoto({
+      caption: null,
+      imageBuffer: card,
+      chatId: TELEGRAM_CHAT_ID_ADS,
+      token: TELEGRAM_BOT_TOKEN_ADS,
+    });
+  } catch (photoErr) {
+    console.error('Telegram image send failed (ads):', photoErr.message);
+    await sendTelegramMessage(textFallback, {
+      chatId: TELEGRAM_CHAT_ID_ADS,
+      token: TELEGRAM_BOT_TOKEN_ADS,
+    });
+  }
 }
 
 function queueAdSend({ adId, adPayload }) {
