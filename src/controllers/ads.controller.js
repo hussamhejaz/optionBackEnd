@@ -5,7 +5,7 @@ const { sendTelegramPhoto, sendTelegramMessage } = require('../services/telegram
 const { getOptionContractStats } = require('../services/thetaClient');
 const TELEGRAM_CHAT_ID_ADS = process.env.TELEGRAM_CHAT_ID_ADS || process.env.TELEGRAM_CHAT_ID;
 const TELEGRAM_BOT_TOKEN_ADS = process.env.TELEGRAM_BOT_TOKEN_ADS || process.env.TELEGRAM_BOT_TOKEN;
-const MIN_AD_PROFIT_PERCENT = 50;
+const MIN_AD_PROFIT_USD = 50;
 
 const adsCol = db.collection('ads');
 const tradesCol = db.collection('trades');
@@ -26,8 +26,8 @@ function toFiniteNumberOrNull(value) {
   return Number.isFinite(num) ? num : null;
 }
 
-function meetsMinAdProfitPercent(ad) {
-  return Number(ad?.pnlPercent) >= MIN_AD_PROFIT_PERCENT;
+function meetsMinAdProfitUsd(ad) {
+  return Number(ad?.pnlAmount) >= MIN_AD_PROFIT_USD;
 }
 
 function toMillis(ts) {
@@ -117,9 +117,9 @@ async function buildWinningAdFromTrade({ tradeId, title }) {
   const trade = hydrateTradeFromReport(tradeDoc.exists ? tradeDoc.data() : {}, report);
   const qualifiesAsSuccess = Boolean(trade.isSuccessful) || Number(trade.pnl || 0) > 0;
   if (!qualifiesAsSuccess) return { notWinning: true };
-  const pnlPercent = Number(trade.pnlPercent);
-  if (!Number.isFinite(pnlPercent) || pnlPercent < MIN_AD_PROFIT_PERCENT) {
-    return { belowMinProfitPercent: true };
+  const pnlAmount = Number(trade.pnl);
+  if (!Number.isFinite(pnlAmount) || pnlAmount < MIN_AD_PROFIT_USD) {
+    return { belowMinProfitUsd: true };
   }
   
   // Validate symbol
@@ -288,7 +288,7 @@ async function listAds(req, res, next) {
     const snap = await adsCol.orderBy('createdAt', 'desc').get();
     const ads = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((ad) => meetsMinAdProfitPercent(ad));
+      .filter((ad) => meetsMinAdProfitUsd(ad));
     res.json(ads);
   } catch (err) {
     next(err);
@@ -356,8 +356,8 @@ async function createAdFromTrade(req, res, next) {
     if (result.notWinning) {
       return res.status(400).json({ message: 'Trade is not successful yet' });
     }
-    if (result.belowMinProfitPercent) {
-      return res.status(400).json({ message: 'Trade profit percent must be 50% or higher' });
+    if (result.belowMinProfitUsd) {
+      return res.status(400).json({ message: 'Trade profit amount must be 50$ or higher' });
     }
     if (result.invalidSymbol) {
       return res.status(400).json({ message: result.message });
@@ -384,8 +384,8 @@ async function sendAdFromTrade(req, res, next) {
     if (result.notWinning) {
       return res.status(400).json({ message: 'Trade is not successful yet' });
     }
-    if (result.belowMinProfitPercent) {
-      return res.status(400).json({ message: 'Trade profit percent must be 50% or higher' });
+    if (result.belowMinProfitUsd) {
+      return res.status(400).json({ message: 'Trade profit amount must be 50$ or higher' });
     }
     if (result.invalidSymbol) {
       return res.status(400).json({ message: result.message });
@@ -414,8 +414,8 @@ async function sendAdToTelegram(req, res, next) {
     const adDoc = await adsCol.doc(id).get();
     if (!adDoc.exists) return res.status(404).json({ message: 'Ad not found' });
     const ad = adDoc.data();
-    if (!meetsMinAdProfitPercent(ad)) {
-      return res.status(400).json({ message: 'Ad profit percent must be 50% or higher' });
+    if (!meetsMinAdProfitUsd(ad)) {
+      return res.status(400).json({ message: 'Ad profit amount must be 50$ or higher' });
     }
     let adForSend = { ...ad };
 
