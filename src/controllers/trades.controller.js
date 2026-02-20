@@ -635,6 +635,7 @@ async function getWinningTrades(req, res, next) {
 
     const addWinnerCandidate = (trade) => {
       if (!trade || !trade.id) return;
+      if (trade.autoAdSuppressedAt) return;
 
       // Trade qualifies if marked successful or has positive PnL.
       const isSuccessful = Boolean(trade.isSuccessful);
