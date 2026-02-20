@@ -6,6 +6,7 @@ const { getOptionContractStats } = require('../services/thetaClient');
 const TELEGRAM_CHAT_ID_ADS = process.env.TELEGRAM_CHAT_ID_ADS || process.env.TELEGRAM_CHAT_ID;
 const TELEGRAM_BOT_TOKEN_ADS = process.env.TELEGRAM_BOT_TOKEN_ADS || process.env.TELEGRAM_BOT_TOKEN;
 const MIN_AD_PROFIT_USD = 50;
+const OPTION_MULTIPLIER = 100;
 
 const adsCol = db.collection('ads');
 const tradesCol = db.collection('trades');
@@ -28,6 +29,28 @@ function toFiniteNumberOrNull(value) {
 
 function meetsMinAdProfitUsd(ad) {
   return Number(ad?.pnlAmount) >= MIN_AD_PROFIT_USD;
+}
+
+function deriveLivePnlAmount(trade = {}) {
+  const direct = Number(trade?.pnl);
+  if (Number.isFinite(direct)) return direct;
+
+  const entry = Number(trade?.entryPrice);
+  const current = Number(trade?.closePrice ?? trade?.lastMidPrice ?? trade?.lastNotifiedPrice);
+  const contractsRaw = Number(trade?.contracts);
+  const contracts = Number.isFinite(contractsRaw) && contractsRaw > 0 ? contractsRaw : 1;
+  if (!Number.isFinite(entry) || !Number.isFinite(current)) return null;
+  return (current - entry) * OPTION_MULTIPLIER * contracts;
+}
+
+function deriveLivePnlPercent(trade = {}) {
+  const direct = Number(trade?.pnlPercent);
+  if (Number.isFinite(direct)) return direct;
+
+  const entry = Number(trade?.entryPrice);
+  const current = Number(trade?.closePrice ?? trade?.lastMidPrice ?? trade?.lastNotifiedPrice);
+  if (!Number.isFinite(entry) || !Number.isFinite(current) || entry === 0) return null;
+  return ((current - entry) / entry) * 100;
 }
 
 async function suppressAutoAdForTradeIds(tradeIds = []) {
@@ -140,6 +163,15 @@ async function buildWinningAdFromTrade({ tradeId, title }) {
   if (!tradeDoc.exists && !report) return { notFound: true };
 
   const trade = hydrateTradeFromReport(tradeDoc.exists ? tradeDoc.data() : {}, report);
+  const livePnlAmount = deriveLivePnlAmount(trade);
+  if (!Number.isFinite(Number(trade.pnl)) && Number.isFinite(livePnlAmount)) {
+    trade.pnl = Number(livePnlAmount.toFixed(2));
+  }
+  const livePnlPercent = deriveLivePnlPercent(trade);
+  if (!Number.isFinite(Number(trade.pnlPercent)) && Number.isFinite(livePnlPercent)) {
+    trade.pnlPercent = Number(livePnlPercent.toFixed(2));
+  }
+
   const qualifiesAsSuccess = Boolean(trade.isSuccessful) || Number(trade.pnl || 0) > 0;
   if (!qualifiesAsSuccess) return { notWinning: true };
   const pnlAmount = Number(trade.pnl);
