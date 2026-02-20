@@ -30,6 +30,31 @@ function meetsMinAdProfitUsd(ad) {
   return Number(ad?.pnlAmount) >= MIN_AD_PROFIT_USD;
 }
 
+async function suppressAutoAdForTradeIds(tradeIds = []) {
+  const uniqueIds = Array.from(
+    new Set(
+      tradeIds
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+    )
+  );
+  if (!uniqueIds.length) return;
+  const ts = getServerTimestamp();
+  await Promise.all(
+    uniqueIds.map((tradeId) =>
+      tradesCol.doc(tradeId).set(
+        {
+          autoAdSuppressedAt: ts,
+          autoAdCreatedAt: ts,
+          autoAdDeletedAt: ts,
+          updatedAt: ts,
+        },
+        { merge: true }
+      )
+    )
+  );
+}
+
 function toMillis(ts) {
   if (!ts) return 0;
   if (typeof ts.toMillis === 'function') return ts.toMillis();
@@ -324,7 +349,9 @@ async function deleteAd(req, res, next) {
     const ref = adsCol.doc(req.params.id);
     const doc = await ref.get();
     if (!doc.exists) return res.status(404).json({ message: 'Ad not found' });
+    const ad = doc.data() || {};
     await ref.delete();
+    await suppressAutoAdForTradeIds([ad.tradeId]);
     res.json({ message: 'Deleted' });
   } catch (err) {
     next(err);
@@ -338,7 +365,9 @@ async function deleteAllAds(req, res, next) {
       return res.json({ message: 'No ads to delete', deletedCount: 0 });
     }
 
+    const tradeIds = snap.docs.map((doc) => (doc.data() || {}).tradeId);
     await Promise.all(snap.docs.map((doc) => adsCol.doc(doc.id).delete()));
+    await suppressAutoAdForTradeIds(tradeIds);
     return res.json({ message: 'All ads deleted', deletedCount: snap.size });
   } catch (err) {
     next(err);

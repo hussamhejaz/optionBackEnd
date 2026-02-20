@@ -11,6 +11,7 @@ if (forceIpv4First) {
 
 const app = require('./app');
 const { startWatcher } = require('./jobs/priceWatcher');
+const { startAdsCleanup } = require('./jobs/adsCleanup');
 
 const PORT = process.env.PORT || 5000;
 
@@ -19,3 +20,4 @@ app.listen(PORT, () => {
 });
 
 startWatcher();
+startAdsCleanup();

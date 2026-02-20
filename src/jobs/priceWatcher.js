@@ -118,7 +118,10 @@ async function processTrade(doc) {
       mid >= baseline + alertStep &&
       (!Number.isFinite(lastAlertMid) || Math.abs(lastAlertMid - midRounded) >= 0.005);
     const shouldSendMilestoneAlert = reachedFiftyDollars && !data.milestone50SentAt;
-    const shouldCreateAutoAd = pnlAmount >= AUTO_AD_MIN_PROFIT_USD && !data.autoAdCreatedAt;
+    const shouldCreateAutoAd =
+      pnlAmount >= AUTO_AD_MIN_PROFIT_USD &&
+      !data.autoAdCreatedAt &&
+      !data.autoAdSuppressedAt;
 
     let stepText = '';
     let reached = null;
