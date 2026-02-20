@@ -406,6 +406,29 @@ async function deleteAllAds(req, res, next) {
   }
 }
 
+async function deleteAdsByTrade(req, res, next) {
+  try {
+    const tradeId = String(req.params.tradeId || '').trim();
+    if (!tradeId) {
+      return res.status(400).json({ message: 'tradeId is required' });
+    }
+
+    const snap = await adsCol.where('tradeId', '==', tradeId).get();
+    if (snap.size) {
+      await Promise.all(snap.docs.map((doc) => adsCol.doc(doc.id).delete()));
+    }
+
+    await suppressAutoAdForTradeIds([tradeId]);
+    return res.json({
+      message: 'Ads deleted for trade and auto-ads suppressed',
+      tradeId,
+      deletedCount: snap.size,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function createAdFromTrade(req, res, next) {
   try {
     requireFields(req.body, ['tradeId']);
@@ -528,6 +551,7 @@ module.exports = {
   updateAd,
   deleteAd,
   deleteAllAds,
+  deleteAdsByTrade,
   createAdFromTrade,
   sendAdFromTrade,
   sendAdToTelegram,
