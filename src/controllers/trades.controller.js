@@ -438,6 +438,18 @@ function formatPeriods(date) {
   };
 }
 
+function derivePnlAmount(trade = {}) {
+  const directPnl = Number(trade.pnl);
+  if (Number.isFinite(directPnl)) return directPnl;
+
+  const entry = Number(trade.entryPrice);
+  const current = Number(trade.closePrice ?? trade.lastMidPrice ?? trade.lastNotifiedPrice);
+  const contractsRaw = Number(trade.contracts);
+  const contracts = Number.isFinite(contractsRaw) && contractsRaw > 0 ? contractsRaw : 1;
+  if (!Number.isFinite(entry) || !Number.isFinite(current)) return null;
+  return (current - entry) * OPTION_MULTIPLIER * contracts;
+}
+
 async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) {
   const ref = collection.doc(id);
   const doc = await ref.get();
@@ -602,9 +614,10 @@ async function getWinningTrades(req, res, next) {
     const minPnlQuery = Number(req.query?.minPnl);
     const minPnl = Number.isFinite(minPnlQuery) ? minPnlQuery : 50;
 
-    // Fetch closed trades and reports, then merge so report-only winners are not lost.
-    const [snap, reportsSnap] = await Promise.all([
+    // Fetch open/closed trades + reports, then merge so report-only winners are not lost.
+    const [closedSnap, openSnap, reportsSnap] = await Promise.all([
       collection.where('status', '==', 'CLOSED').get(),
+      collection.where('status', '==', 'OPEN').get(),
       reportsCollection.get(),
     ]);
     const latestReportByTradeId = new Map();
@@ -625,9 +638,11 @@ async function getWinningTrades(req, res, next) {
 
       // Trade qualifies if marked successful or has positive PnL.
       const isSuccessful = Boolean(trade.isSuccessful);
-      const pnlValue = Number(trade.pnl || 0);
+      const pnlValue = derivePnlAmount(trade);
+      if (!Number.isFinite(pnlValue)) return;
       if (!isSuccessful && pnlValue <= 0) return;
       if (pnlValue < minPnl) return;
+      trade.pnl = pnlValue;
 
       // Only include trades with valid symbol and strike
       const symbol = String(trade.symbol || '').trim().toUpperCase();
@@ -656,8 +671,14 @@ async function getWinningTrades(req, res, next) {
       }
     };
 
+    // First: live winners from OPEN trades (current profit reached threshold).
+    openSnap.docs.forEach((doc) => {
+      const rawTrade = { id: doc.id, ...doc.data() };
+      addWinnerCandidate(rawTrade);
+    });
+
     // First: winners from CLOSED trade documents (hydrated with latest reports when present)
-    snap.docs.forEach((doc) => {
+    closedSnap.docs.forEach((doc) => {
       const rawTrade = { id: doc.id, ...doc.data() };
       const trade = hydrateTradeFromReport(rawTrade, latestReportByTradeId.get(doc.id) || null);
       addWinnerCandidate(trade);
