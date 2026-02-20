@@ -66,3 +66,19 @@ file /tmp/debug_card_response.png
 Expected result:
 - `Content-Type: image/png`
 - non-trivial file size (usually much larger than a few KB)
+
+## 5) Optional fallback renderer (SVG)
+
+If canvas still produces blank images on your VPS, force SVG renderer:
+
+```bash
+echo "CARD_RENDERER=svg" >> .env
+```
+
+Then restart your service. This keeps card generation working without relying on Cairo/Pango at runtime.
+
+If SVG fallback is enabled, make sure Chromium is available for Puppeteer:
+
+```bash
+npx puppeteer browsers install chrome
+```

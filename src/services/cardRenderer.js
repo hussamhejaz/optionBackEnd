@@ -1,5 +1,6 @@
 const { createCanvas, loadImage } = require('canvas');
 const path = require('path');
+const { renderTradeCardPNG: renderTradeCardPNGWithSvg } = require('./cardRenderer.svg');
 
 const green = '#35c46c';
 const red = '#e55454';
@@ -420,6 +421,26 @@ async function renderTradeCardPNG({
   logoBuffer,
   variant = 'default',
 }) {
+  const payload = {
+    symbol,
+    strike,
+    expiration,
+    right,
+    entryPrice,
+    mid,
+    openInterest,
+    volume,
+    pnlValue,
+    pnlPct,
+    logoBuffer,
+    variant,
+  };
+  const rendererMode = String(process.env.CARD_RENDERER || 'canvas').toLowerCase();
+  if (rendererMode === 'svg') {
+    console.log('[CARD_RENDER] using SVG renderer (CARD_RENDERER=svg)');
+    return renderTradeCardPNGWithSvg(payload);
+  }
+
   try {
     const isWinningAd = variant === 'winning-ad';
     const width = 1080;
@@ -470,12 +491,14 @@ async function renderTradeCardPNG({
     const buffer = canvas.toBuffer('image/png');
     console.log(`[CARD_RENDER] PNG size: ${buffer.length} bytes (${variant})`);
     if (buffer.length < 5000) {
-      console.warn('[CARD_RENDER] PNG too small; canvas dependencies likely missing');
+      console.warn('[CARD_RENDER] PNG too small; canvas dependencies likely missing. Falling back to SVG renderer.');
+      return renderTradeCardPNGWithSvg(payload);
     }
     return buffer;
   } catch (err) {
-    console.error('[CARD_RENDER] Failed to render card PNG:', err.message);
-    throw err;
+    console.error('[CARD_RENDER] Failed to render card PNG with canvas:', err.message);
+    console.log('[CARD_RENDER] Falling back to SVG renderer.');
+    return renderTradeCardPNGWithSvg(payload);
   }
 }
 
