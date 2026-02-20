@@ -56,16 +56,18 @@ function hydrateTradeFromReport(trade = {}, report = null) {
   if (!Number.isFinite(Number(hydrated.entryPrice)) && Number.isFinite(Number(report.entryPrice))) {
     hydrated.entryPrice = Number(report.entryPrice);
   }
-  if (!Number.isFinite(Number(hydrated.closePrice)) && Number.isFinite(Number(report.closePrice))) {
+  if (Number.isFinite(Number(report.closePrice))) {
     hydrated.closePrice = Number(report.closePrice);
   }
-  if (!Number.isFinite(Number(hydrated.pnl)) && Number.isFinite(Number(report.pnlAmount))) {
+  if (Number.isFinite(Number(report.pnlAmount))) {
     hydrated.pnl = Number(report.pnlAmount);
   }
-  if (!Number.isFinite(Number(hydrated.pnlPercent)) && Number.isFinite(Number(report.pnlPercent))) {
+  if (Number.isFinite(Number(report.pnlPercent))) {
     hydrated.pnlPercent = Number(report.pnlPercent);
   }
-
+  if (hydrated.isSuccessful === undefined && report.isSuccessful !== undefined) {
+    hydrated.isSuccessful = Boolean(report.isSuccessful);
+  }
   return hydrated;
 }
 
@@ -94,6 +96,7 @@ function buildAdPayloadFromTrade({ tradeId, trade, title, openInterest, volume }
     closePrice: trade.closePrice ?? trade.lastMidPrice ?? null,
     pnlAmount: trade.pnl ?? null,
     pnlPercent: trade.pnlPercent ?? null,
+    isSuccessful: Boolean(trade.isSuccessful),
     openInterest: openInterest ?? null,
     volume: volume ?? null,
     createdAt: getServerTimestamp(),
@@ -107,7 +110,8 @@ async function buildWinningAdFromTrade({ tradeId, title }) {
   if (!tradeDoc.exists && !report) return { notFound: true };
 
   const trade = hydrateTradeFromReport(tradeDoc.exists ? tradeDoc.data() : {}, report);
-  if (Number(trade.pnl || 0) <= 0) return { notWinning: true };
+  const qualifiesAsSuccess = Boolean(trade.isSuccessful) || Number(trade.pnl || 0) > 0;
+  if (!qualifiesAsSuccess) return { notWinning: true };
   
   // Validate symbol
   const symbol = String(trade.symbol || '').trim().toUpperCase();
@@ -186,14 +190,14 @@ async function buildWinningAdFromTrade({ tradeId, title }) {
 
 async function sendAdCardToTelegram(ad) {
   const textFallback =
-    `🏆 صفقة رابحة\n` +
+    `🏆 صفقة ناجحة\n` +
     `الرمز: ${ad.symbol}\n` +
     `النوع: ${String(ad.right || '').toUpperCase()}\n` +
     `السترايك: ${ad.strike}\n` +
     `التاريخ: ${ad.expiration}\n` +
     `الدخول: ${ad.entryPrice ?? 'n/a'}\n` +
     `الإغلاق: ${ad.closePrice ?? 'n/a'}\n` +
-    `الربح: ${ad.pnlAmount ?? 'n/a'} (${ad.pnlPercent ?? 'n/a'}%)`;
+    `النتيجة: ${ad.pnlAmount ?? 'n/a'} (${ad.pnlPercent ?? 'n/a'}%)`;
 
   try {
     const card = await renderTradeCardPNG({
@@ -324,7 +328,7 @@ async function createAdFromTrade(req, res, next) {
       return res.status(404).json({ message: 'Trade not found' });
     }
     if (result.notWinning) {
-      return res.status(400).json({ message: 'Trade is not profitable (pnl <= 0)' });
+      return res.status(400).json({ message: 'Trade is not successful yet' });
     }
     if (result.invalidSymbol) {
       return res.status(400).json({ message: result.message });
@@ -349,7 +353,7 @@ async function sendAdFromTrade(req, res, next) {
       return res.status(404).json({ message: 'Trade not found' });
     }
     if (result.notWinning) {
-      return res.status(400).json({ message: 'Trade is not profitable (pnl <= 0)' });
+      return res.status(400).json({ message: 'Trade is not successful yet' });
     }
     if (result.invalidSymbol) {
       return res.status(400).json({ message: result.message });

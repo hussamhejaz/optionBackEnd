@@ -33,6 +33,7 @@ const TELEGRAM_BOT_TOKEN_TRADES =
   process.env.TELEGRAM_BOT_TOKEN_TRADES || process.env.TELEGRAM_BOT_TOKEN;
 
 const OPTION_MULTIPLIER = 100; // standard equity option multiplier
+const SUCCESS_PROFIT_TARGET_USD = 50;
 const createTradeWriteTimeoutRaw = Number(process.env.CREATE_TRADE_WRITE_TIMEOUT_MS || 60000);
 const createTradeWriteRecoveryRaw = Number(process.env.CREATE_TRADE_WRITE_RECOVERY_MS || 60000);
 const CREATE_TRADE_WRITE_TIMEOUT_MS =
@@ -104,14 +105,17 @@ function hydrateTradeFromReport(trade = {}, report = null) {
   if (!Number.isFinite(Number(hydrated.entryPrice)) && Number.isFinite(Number(report.entryPrice))) {
     hydrated.entryPrice = Number(report.entryPrice);
   }
-  if (!Number.isFinite(Number(hydrated.closePrice)) && Number.isFinite(Number(report.closePrice))) {
+  if (Number.isFinite(Number(report.closePrice))) {
     hydrated.closePrice = Number(report.closePrice);
   }
-  if (!Number.isFinite(Number(hydrated.pnl)) && Number.isFinite(Number(report.pnlAmount))) {
+  if (Number.isFinite(Number(report.pnlAmount))) {
     hydrated.pnl = Number(report.pnlAmount);
   }
-  if (!Number.isFinite(Number(hydrated.pnlPercent)) && Number.isFinite(Number(report.pnlPercent))) {
+  if (Number.isFinite(Number(report.pnlPercent))) {
     hydrated.pnlPercent = Number(report.pnlPercent);
+  }
+  if (hydrated.isSuccessful === undefined && report.isSuccessful !== undefined) {
+    hydrated.isSuccessful = Boolean(report.isSuccessful);
   }
 
   return hydrated;
@@ -455,6 +459,32 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
     Number.isFinite(entry) && Number.isFinite(closePrice) && entry !== 0
       ? Number((((closePrice - entry) / entry) * 100).toFixed(2))
       : null;
+  const highPrice = Number.isFinite(Number(data.highPrice)) ? Number(data.highPrice) : null;
+  const maxPnlAmount =
+    Number.isFinite(entry) && Number.isFinite(highPrice)
+      ? (highPrice - entry) * OPTION_MULTIPLIER * contracts
+      : null;
+  const hasReachedProfitTarget =
+    Boolean(data.hasReachedProfit50 || data.reachedProfit50At || data.milestone50SentAt) ||
+    (Number.isFinite(maxPnlAmount) && maxPnlAmount >= SUCCESS_PROFIT_TARGET_USD);
+  const dippedBelowEntryAfterProfitTarget = Boolean(data.dippedBelowEntryAfterProfit50);
+  const useHighPriceForReport =
+    hasReachedProfitTarget &&
+    !dippedBelowEntryAfterProfitTarget &&
+    Number.isFinite(highPrice) &&
+    Number.isFinite(entry) &&
+    highPrice >= entry;
+  const reportClosePrice = useHighPriceForReport ? highPrice : closePrice;
+  const reportPnlAmount =
+    Number.isFinite(entry) && Number.isFinite(reportClosePrice)
+      ? (reportClosePrice - entry) * OPTION_MULTIPLIER * contracts
+      : null;
+  const reportPnlPercent =
+    Number.isFinite(entry) && Number.isFinite(reportClosePrice) && entry !== 0
+      ? Number((((reportClosePrice - entry) / entry) * 100).toFixed(2))
+      : null;
+  const isSuccessful =
+    hasReachedProfitTarget || (Number.isFinite(pnlAmount) && pnlAmount > 0);
 
   const closedAt = getServerTimestamp();
   const updates = {
@@ -463,6 +493,14 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
     closePrice: Number.isFinite(closePrice) ? closePrice : null,
     pnl: pnlAmount,
     pnlPercent,
+    reportClosePrice: Number.isFinite(reportClosePrice) ? reportClosePrice : null,
+    reportPnlAmount,
+    reportPnlPercent,
+    isSuccessful,
+    successRule: hasReachedProfitTarget ? 'PROFIT_TARGET_50_REACHED' : 'POSITIVE_PNL',
+    hasReachedProfit50: hasReachedProfitTarget,
+    dippedBelowEntryAfterProfit50: dippedBelowEntryAfterProfitTarget,
+    usedHighPriceForReport: useHighPriceForReport,
     stopLoss: Number.isFinite(stopLossValue) ? stopLossValue : data.stopLoss ?? null,
     updatedAt: closedAt,
     // Preserve symbol, right, strike, expiration for winning trades
@@ -486,9 +524,18 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
     expiration: data.expiration,
     contracts,
     entryPrice: entry,
-    closePrice: updates.closePrice,
-    pnlAmount,
-    pnlPercent,
+    closePrice: Number.isFinite(reportClosePrice) ? reportClosePrice : updates.closePrice,
+    closePriceActual: updates.closePrice,
+    highPrice: Number.isFinite(highPrice) ? highPrice : null,
+    pnlAmount: reportPnlAmount,
+    pnlPercent: reportPnlPercent,
+    pnlAmountActual: pnlAmount,
+    pnlPercentActual: pnlPercent,
+    isSuccessful,
+    successRule: hasReachedProfitTarget ? 'PROFIT_TARGET_50_REACHED' : 'POSITIVE_PNL',
+    hasReachedProfit50: hasReachedProfitTarget,
+    dippedBelowEntryAfterProfit50: dippedBelowEntryAfterProfitTarget,
+    usedHighPriceForReport: useHighPriceForReport,
     status: 'CLOSED',
     reason,
     closedAt: getServerTimestamp(),
@@ -573,8 +620,9 @@ async function getWinningTrades(req, res, next) {
     const addWinnerCandidate = (trade) => {
       if (!trade || !trade.id) return;
 
-      // Only include trades with positive PnL
-      if (Number(trade.pnl || 0) <= 0) return;
+      // Trade qualifies if marked successful or has positive PnL.
+      const isSuccessful = Boolean(trade.isSuccessful);
+      if (!isSuccessful && Number(trade.pnl || 0) <= 0) return;
 
       // Only include trades with valid symbol and strike
       const symbol = String(trade.symbol || '').trim().toUpperCase();
@@ -624,6 +672,7 @@ async function getWinningTrades(req, res, next) {
         closePrice: Number.isFinite(Number(report.closePrice)) ? Number(report.closePrice) : null,
         pnl: Number.isFinite(Number(report.pnlAmount)) ? Number(report.pnlAmount) : null,
         pnlPercent: Number.isFinite(Number(report.pnlPercent)) ? Number(report.pnlPercent) : null,
+        isSuccessful: Boolean(report.isSuccessful),
         closedAt: report.closedAt || null,
         updatedAt: report.closedAt || null,
       };

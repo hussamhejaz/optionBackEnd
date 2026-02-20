@@ -86,6 +86,10 @@ async function processTrade(doc) {
     const contracts = Number.isFinite(data.contracts) ? data.contracts : 1;
     const pnlAmount = (mid - entry) * 100 * contracts;
     const reachedFiftyDollars = pnlAmount >= 50;
+    const hadReachedFiftyBefore = Boolean(data.reachedProfit50At || data.hasReachedProfit50);
+    const reachedFiftyNow = reachedFiftyDollars && !hadReachedFiftyBefore;
+    const hasReachedFifty = hadReachedFiftyBefore || reachedFiftyDollars;
+    const dippedBelowEntryAfter50 = hasReachedFifty && mid < entry;
     const midRounded = Number(mid.toFixed(2));
     const lastAlertMid = toFiniteNumberOrNull(data.lastAlertMid);
 
@@ -96,7 +100,13 @@ async function processTrade(doc) {
       volume: toFiniteNumberOrNull(stats.volume),
       statsUpdatedAt: getServerTimestamp(),
       updatedAt: getServerTimestamp(),
+      hasReachedProfit50: hasReachedFifty,
+      dippedBelowEntryAfterProfit50:
+        Boolean(data.dippedBelowEntryAfterProfit50) || dippedBelowEntryAfter50,
     };
+    if (reachedFiftyNow) {
+      updates.reachedProfit50At = getServerTimestamp();
+    }
 
     const shouldSendStepAlert =
       mid >= baseline + alertStep &&
