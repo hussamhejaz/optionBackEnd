@@ -331,6 +331,20 @@ async function deleteAd(req, res, next) {
   }
 }
 
+async function deleteAllAds(req, res, next) {
+  try {
+    const snap = await adsCol.get();
+    if (!snap.size) {
+      return res.json({ message: 'No ads to delete', deletedCount: 0 });
+    }
+
+    await Promise.all(snap.docs.map((doc) => adsCol.doc(doc.id).delete()));
+    return res.json({ message: 'All ads deleted', deletedCount: snap.size });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function createAdFromTrade(req, res, next) {
   try {
     requireFields(req.body, ['tradeId']);
@@ -452,6 +466,7 @@ module.exports = {
   getAd,
   updateAd,
   deleteAd,
+  deleteAllAds,
   createAdFromTrade,
   sendAdFromTrade,
   sendAdToTelegram,
