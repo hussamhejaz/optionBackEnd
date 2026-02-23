@@ -81,10 +81,9 @@ async function reportForField(field, value) {
   const totalPnL = reports.reduce((sum, r) => sum + Number(r.pnlAmount || 0), 0);
   const tradeCount = reports.length;
   const winCount = reports.filter((r) => Boolean(r.isWinOver50)).length;
-  // User-defined metric: sum of winning rise percentages (can exceed 100%).
+  // User-defined metric: net percent = winners% - losers%.
   const winRate = Number(
     reports
-      .filter((r) => Boolean(r.isWinOver50))
       .reduce((sum, r) => sum + (Number(r.pnlPercent) || 0), 0)
       .toFixed(2)
   );

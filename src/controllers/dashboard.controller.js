@@ -87,18 +87,18 @@ async function dashboardSummary(req, res, next) {
     let netProfit = 0;
     let wins = 0;
     let losses = 0;
-    let winRateSumPercent = 0;
+    let winRateNetPercent = 0;
     reports.forEach((doc) => {
       const d = doc.data();
       const normalized = normalizeReportMetrics(d);
       const pnl = normalized.pnlAmount;
       netProfit += pnl;
+      winRateNetPercent += Number(normalized.pnlPercent) || 0;
       // Prefer explicit success flag from report (new logic),
       // fall back to pnl sign for older records.
       if (normalized.isSuccessful !== undefined) {
         if (Boolean(normalized.isSuccessful)) {
           wins += 1;
-          winRateSumPercent += Number(normalized.pnlPercent) || 0;
         }
         else losses += 1;
       } else if (pnl > 0) {
@@ -108,8 +108,8 @@ async function dashboardSummary(req, res, next) {
       }
     });
     const totalClosed = wins + losses;
-    // User-defined metric: sum of winning rise percentages (can exceed 100%).
-    const winRate = Number(winRateSumPercent.toFixed(2));
+    // User-defined metric: net percent = winners% - losers%.
+    const winRate = Number(winRateNetPercent.toFixed(2));
 
     // Weekly profit trend (last 7 days, inclusive)
     const now = new Date();
