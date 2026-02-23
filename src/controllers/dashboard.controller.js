@@ -34,9 +34,9 @@ function normalizeReportMetrics(report = {}) {
         ? Number(report.pnlAmount)
         : 0;
   const effectiveSuccess =
-    report.isSuccessful !== undefined
-      ? Boolean(report.isSuccessful)
-      : effectivePnlAmount > 0;
+    Boolean(report.hasReachedProfit50) ||
+    report.successRule === 'PROFIT_TARGET_50_REACHED' ||
+    (Number.isFinite(peakPnlAmount) && peakPnlAmount >= 50);
 
   return {
     pnlAmount: effectivePnlAmount,
