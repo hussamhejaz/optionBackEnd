@@ -36,6 +36,10 @@ function normalizeReportMetrics(report = {}) {
     Number.isFinite(entry) && Number.isFinite(effectiveClose) && entry !== 0
       ? Number((((effectiveClose - entry) / entry) * 100).toFixed(2))
       : toFiniteNumberOrNull(report.pnlPercent);
+  const isWinOver50 =
+    Boolean(report.hasReachedProfit50) ||
+    report.successRule === 'PROFIT_TARGET_50_REACHED' ||
+    effectivePnlAmount >= 50;
 
   return {
     ...report,
@@ -47,6 +51,7 @@ function normalizeReportMetrics(report = {}) {
         ? Boolean(report.isSuccessful)
         : effectivePnlAmount > 0,
     usedHighPriceForReport: Boolean(report.usedHighPriceForReport) || useHighPriceForReport,
+    isWinOver50,
   };
 }
 
@@ -74,7 +79,10 @@ async function reportForField(field, value) {
   const snap = await reportsCollection.where(field, '==', value).get();
   const reports = snap.docs.map((d) => normalizeReportMetrics({ id: d.id, ...d.data() }));
   const totalPnL = reports.reduce((sum, r) => sum + Number(r.pnlAmount || 0), 0);
-  return { totalPnL, reports };
+  const tradeCount = reports.length;
+  const winCount = reports.filter((r) => Boolean(r.isWinOver50)).length;
+  const winRate = tradeCount ? Number(((winCount / tradeCount) * 100).toFixed(2)) : 0;
+  return { totalPnL, reports, tradeCount, winCount, winRate };
 }
 
 async function dailyReport(req, res, next) {
