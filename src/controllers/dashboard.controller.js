@@ -2,6 +2,41 @@ const { db, admin } = require('../database');
 
 const tradesCol = db.collection('trades');
 const reportsCol = db.collection('reports');
+const OPTION_MULTIPLIER = 100;
+
+function toFiniteNumberOrNull(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeReportMetrics(report = {}) {
+  const entry = toFiniteNumberOrNull(report.entryPrice);
+  const close = toFiniteNumberOrNull(report.closePrice);
+  const high = toFiniteNumberOrNull(report.highPrice);
+  const contractsRaw = Number(report.contracts);
+  const contracts = Number.isFinite(contractsRaw) && contractsRaw > 0 ? contractsRaw : 1;
+
+  const useHighPriceForReport =
+    Number.isFinite(entry) &&
+    Number.isFinite(high) &&
+    high > entry;
+  const effectiveClose = useHighPriceForReport ? high : close;
+  const effectivePnlAmount =
+    Number.isFinite(entry) && Number.isFinite(effectiveClose)
+      ? Number(((effectiveClose - entry) * OPTION_MULTIPLIER * contracts).toFixed(2))
+      : Number.isFinite(Number(report.pnlAmount))
+        ? Number(report.pnlAmount)
+        : 0;
+  const effectiveSuccess =
+    report.isSuccessful !== undefined
+      ? Boolean(report.isSuccessful)
+      : effectivePnlAmount > 0;
+
+  return {
+    pnlAmount: effectivePnlAmount,
+    isSuccessful: effectiveSuccess,
+  };
+}
 
 // Helper function to create timestamp from date (works with both Firestore and local DB)
 function createTimestampFromDate(date) {
@@ -41,10 +76,19 @@ async function dashboardSummary(req, res, next) {
     let losses = 0;
     reports.forEach((doc) => {
       const d = doc.data();
-      const pnl = Number(d.pnlAmount) || 0;
+      const normalized = normalizeReportMetrics(d);
+      const pnl = normalized.pnlAmount;
       netProfit += pnl;
-      if (pnl > 0) wins += 1;
-      else if (pnl < 0) losses += 1;
+      // Prefer explicit success flag from report (new logic),
+      // fall back to pnl sign for older records.
+      if (normalized.isSuccessful !== undefined) {
+        if (Boolean(normalized.isSuccessful)) wins += 1;
+        else losses += 1;
+      } else if (pnl > 0) {
+        wins += 1;
+      } else if (pnl < 0) {
+        losses += 1;
+      }
     });
     const totalClosed = wins + losses;
     const winRate = totalClosed ? Number(((wins / totalClosed) * 100).toFixed(2)) : 0;
@@ -64,6 +108,7 @@ async function dashboardSummary(req, res, next) {
     const reportDocs = reports.docs;
     reportDocs.forEach((doc) => {
       const data = doc.data();
+      const normalized = normalizeReportMetrics(data);
       const ts = data.closedAt;
       if (!ts?.toDate) return;
       const date = ts.toDate();
@@ -71,7 +116,7 @@ async function dashboardSummary(req, res, next) {
       weeklyBuckets.forEach((bucket, idx) => {
         const { start, end } = days[idx];
         if (utc >= start.toMillis() && utc < end.toMillis()) {
-          bucket.value += Number(data.pnlAmount) || 0;
+          bucket.value += normalized.pnlAmount;
         }
       });
     });

@@ -1,6 +1,46 @@
 const { db } = require('../database');
 
 const reportsCollection = db.collection('reports');
+const OPTION_MULTIPLIER = 100;
+
+function toFiniteNumberOrNull(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function normalizeReportMetrics(report = {}) {
+  const entry = toFiniteNumberOrNull(report.entryPrice);
+  const close = toFiniteNumberOrNull(report.closePrice);
+  const high = toFiniteNumberOrNull(report.highPrice);
+
+  const useHighPriceForReport =
+    Number.isFinite(entry) &&
+    Number.isFinite(high) &&
+    high > entry;
+  const effectiveClose = useHighPriceForReport ? high : close;
+  const effectivePnlAmount =
+    Number.isFinite(entry) && Number.isFinite(effectiveClose)
+      ? Number(((effectiveClose - entry) * OPTION_MULTIPLIER * (Number(report.contracts) || 1)).toFixed(2))
+      : Number.isFinite(Number(report.pnlAmount))
+        ? Number(report.pnlAmount)
+        : 0;
+  const effectivePnlPercent =
+    Number.isFinite(entry) && Number.isFinite(effectiveClose) && entry !== 0
+      ? Number((((effectiveClose - entry) / entry) * 100).toFixed(2))
+      : toFiniteNumberOrNull(report.pnlPercent);
+
+  return {
+    ...report,
+    closePrice: Number.isFinite(effectiveClose) ? effectiveClose : report.closePrice,
+    pnlAmount: effectivePnlAmount,
+    pnlPercent: Number.isFinite(effectivePnlPercent) ? effectivePnlPercent : report.pnlPercent,
+    isSuccessful:
+      report.isSuccessful !== undefined
+        ? Boolean(report.isSuccessful)
+        : effectivePnlAmount > 0,
+    usedHighPriceForReport: Boolean(report.usedHighPriceForReport) || useHighPriceForReport,
+  };
+}
 
 function periodsFromDate(date) {
   const d = new Date(date);
@@ -24,7 +64,7 @@ function periodsFromDate(date) {
 
 async function reportForField(field, value) {
   const snap = await reportsCollection.where(field, '==', value).get();
-  const reports = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const reports = snap.docs.map((d) => normalizeReportMetrics({ id: d.id, ...d.data() }));
   const totalPnL = reports.reduce((sum, r) => sum + Number(r.pnlAmount || 0), 0);
   return { totalPnL, reports };
 }
