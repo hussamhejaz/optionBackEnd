@@ -20,7 +20,7 @@ const FIRESTORE_REST_TIMEOUT_MS = Number(process.env.FIRESTORE_REST_TIMEOUT_MS |
 const app = express();
 
 app.use(cors({
-  origin: ['https://options-dashboard-ui.netlify.app','http://localhost:5174'],
+  origin: ['https://options-dashboard-ui.netlify.app','http://localhost:5174', "http://localhost:5173"],
   credentials: true
 }));
 app.use(express.json({ limit: '1mb' }));
