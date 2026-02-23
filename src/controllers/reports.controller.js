@@ -12,15 +12,23 @@ function normalizeReportMetrics(report = {}) {
   const entry = toFiniteNumberOrNull(report.entryPrice);
   const close = toFiniteNumberOrNull(report.closePrice);
   const high = toFiniteNumberOrNull(report.highPrice);
+  const contractsRaw = Number(report.contracts);
+  const contracts = Number.isFinite(contractsRaw) && contractsRaw > 0 ? contractsRaw : 1;
+  const peakPnlAmount =
+    Number.isFinite(entry) && Number.isFinite(high)
+      ? (high - entry) * OPTION_MULTIPLIER * contracts
+      : null;
 
   const useHighPriceForReport =
+    (Boolean(report.hasReachedProfit50) ||
+      (Number.isFinite(peakPnlAmount) && peakPnlAmount >= 50)) &&
     Number.isFinite(entry) &&
     Number.isFinite(high) &&
     high > entry;
   const effectiveClose = useHighPriceForReport ? high : close;
   const effectivePnlAmount =
     Number.isFinite(entry) && Number.isFinite(effectiveClose)
-      ? Number(((effectiveClose - entry) * OPTION_MULTIPLIER * (Number(report.contracts) || 1)).toFixed(2))
+      ? Number(((effectiveClose - entry) * OPTION_MULTIPLIER * contracts).toFixed(2))
       : Number.isFinite(Number(report.pnlAmount))
         ? Number(report.pnlAmount)
         : 0;

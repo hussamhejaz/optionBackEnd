@@ -525,7 +525,8 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
   const dippedBelowEntryAfterProfitTarget = Boolean(data.dippedBelowEntryAfterProfit50);
   const hasHighPriceAboveEntry =
     Number.isFinite(highPrice) && Number.isFinite(entry) && highPrice > entry;
-  const useHighPriceForReport = hasHighPriceAboveEntry;
+  // Keep peak price in report only when trade reached the 50$ profit target.
+  const useHighPriceForReport = hasReachedProfitTarget && hasHighPriceAboveEntry;
   const reportClosePrice = useHighPriceForReport ? highPrice : closePrice;
   const reportPnlAmount =
     Number.isFinite(entry) && Number.isFinite(reportClosePrice)
@@ -553,14 +554,8 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
       ? Number(((peakPriceReached - entry) * OPTION_MULTIPLIER * contracts).toFixed(2))
       : null;
   const isSuccessful =
-    hasReachedProfitTarget ||
-    hasHighPriceAboveEntry ||
-    (Number.isFinite(pnlAmount) && pnlAmount > 0);
-  const successRule = hasReachedProfitTarget
-    ? 'PROFIT_TARGET_50_REACHED'
-    : hasHighPriceAboveEntry
-      ? 'HIGH_PRICE_ABOVE_ENTRY'
-      : 'POSITIVE_PNL';
+    hasReachedProfitTarget || (Number.isFinite(pnlAmount) && pnlAmount > 0);
+  const successRule = hasReachedProfitTarget ? 'PROFIT_TARGET_50_REACHED' : 'POSITIVE_PNL';
 
   const closedAt = getServerTimestamp();
   const updates = {
