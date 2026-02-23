@@ -535,6 +535,23 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
     Number.isFinite(entry) && Number.isFinite(reportClosePrice) && entry !== 0
       ? Number((((reportClosePrice - entry) / entry) * 100).toFixed(2))
       : null;
+  const peakPriceReached = Number.isFinite(highPrice)
+    ? highPrice
+    : Number.isFinite(closePrice)
+      ? closePrice
+      : null;
+  const peakRisePrice =
+    Number.isFinite(entry) && Number.isFinite(peakPriceReached)
+      ? Number((peakPriceReached - entry).toFixed(4))
+      : null;
+  const peakRisePercent =
+    Number.isFinite(entry) && Number.isFinite(peakPriceReached) && entry !== 0
+      ? Number((((peakPriceReached - entry) / entry) * 100).toFixed(2))
+      : null;
+  const peakPnlAmount =
+    Number.isFinite(entry) && Number.isFinite(peakPriceReached)
+      ? Number(((peakPriceReached - entry) * OPTION_MULTIPLIER * contracts).toFixed(2))
+      : null;
   const isSuccessful =
     hasReachedProfitTarget ||
     hasHighPriceAboveEntry ||
@@ -555,6 +572,10 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
     reportClosePrice: Number.isFinite(reportClosePrice) ? reportClosePrice : null,
     reportPnlAmount,
     reportPnlPercent,
+    peakPriceReached,
+    peakRisePrice,
+    peakRisePercent,
+    peakPnlAmount,
     isSuccessful,
     successRule,
     hasReachedProfit50: hasReachedProfitTarget,
@@ -588,6 +609,10 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
     highPrice: Number.isFinite(highPrice) ? highPrice : null,
     pnlAmount: reportPnlAmount,
     pnlPercent: reportPnlPercent,
+    peakPriceReached,
+    peakRisePrice,
+    peakRisePercent,
+    peakPnlAmount,
     pnlAmountActual: pnlAmount,
     pnlPercentActual: pnlPercent,
     isSuccessful,
