@@ -33,6 +33,12 @@ function normalizeReportMetrics(report = {}) {
       : Number.isFinite(Number(report.pnlAmount))
         ? Number(report.pnlAmount)
         : 0;
+  const effectivePnlPercent =
+    Number.isFinite(entry) && Number.isFinite(effectiveClose) && entry !== 0
+      ? Number((((effectiveClose - entry) / entry) * 100).toFixed(2))
+      : Number.isFinite(Number(report.pnlPercent))
+        ? Number(report.pnlPercent)
+        : 0;
   const effectiveSuccess =
     Boolean(report.hasReachedProfit50) ||
     report.successRule === 'PROFIT_TARGET_50_REACHED' ||
@@ -40,6 +46,7 @@ function normalizeReportMetrics(report = {}) {
 
   return {
     pnlAmount: effectivePnlAmount,
+    pnlPercent: effectivePnlPercent,
     isSuccessful: effectiveSuccess,
   };
 }
@@ -80,6 +87,7 @@ async function dashboardSummary(req, res, next) {
     let netProfit = 0;
     let wins = 0;
     let losses = 0;
+    let winRateSumPercent = 0;
     reports.forEach((doc) => {
       const d = doc.data();
       const normalized = normalizeReportMetrics(d);
@@ -88,7 +96,10 @@ async function dashboardSummary(req, res, next) {
       // Prefer explicit success flag from report (new logic),
       // fall back to pnl sign for older records.
       if (normalized.isSuccessful !== undefined) {
-        if (Boolean(normalized.isSuccessful)) wins += 1;
+        if (Boolean(normalized.isSuccessful)) {
+          wins += 1;
+          winRateSumPercent += Number(normalized.pnlPercent) || 0;
+        }
         else losses += 1;
       } else if (pnl > 0) {
         wins += 1;
@@ -97,7 +108,8 @@ async function dashboardSummary(req, res, next) {
       }
     });
     const totalClosed = wins + losses;
-    const winRate = totalClosed ? Number(((wins / totalClosed) * 100).toFixed(2)) : 0;
+    // User-defined metric: sum of winning rise percentages (can exceed 100%).
+    const winRate = Number(winRateSumPercent.toFixed(2));
 
     // Weekly profit trend (last 7 days, inclusive)
     const now = new Date();
