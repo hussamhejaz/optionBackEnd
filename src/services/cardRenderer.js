@@ -215,7 +215,7 @@ function drawBodyPanel(ctx, {
 
   ctx.textAlign = 'right';
   ctx.fillText(formatNum(mid), valueX, rowY);
-  ctx.fillText(Number.isFinite(oi) && oi > 0 ? String(oi) : '--', valueX, rowY + gap);
+  ctx.fillText(formatCompactCount(oi), valueX, rowY + gap);
   ctx.fillText(formatCompactCount(volNum), valueX, rowY + gap * 2);
   ctx.textAlign = 'left';
 
@@ -262,7 +262,7 @@ function drawFooter(ctx, { x, y, width, pnlValue, pnlPct, expiration, right, log
   ctx.fillStyle = rightText === 'put' ? red : green;
   ctx.fillText(rightText, startX + dateWidth, ty);
 
-  drawCandleIcon(ctx, x + width / 2 - 42, y + 20, 0.72);
+  drawCandleIcon(ctx, x + width / 2 - 42, y + 24, 0.72);
 
   if (logo) {
     const maxLogoW = 250;
