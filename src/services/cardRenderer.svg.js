@@ -165,7 +165,7 @@ function footerSvg({ x, y, width, pnlValue, pnlPct, expiration, right, logoDataU
     <text x="${leftCenterX}" y="${y + 66}" fill="${green}" font-size="50" font-weight="700" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${formatNum(pnlValue, 0)}$| ${formatNum(pnlPct)}%</text>
     <text x="${leftCenterX - 20}" y="${y + 112}" fill="${dim}" font-size="36" font-weight="500" text-anchor="end" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(dateText)} </text>
     <text x="${leftCenterX - 18}" y="${y + 112}" fill="${rightColor}" font-size="36" font-weight="500" text-anchor="start" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(rightText)}</text>
-    ${candleSvg(x + width / 2 - 42, y + 24, 0.72)}
+    ${candleSvg(x + width / 2 - 42, y + 32, 0.72)}
     ${logoDataUrl
       ? `<image href="${logoDataUrl}" x="${x + width - 250 - 60}" y="${y + 8}" width="250" height="109" preserveAspectRatio="xMidYMid meet"/>`
       : `<text x="${x + width - 280}" y="${y + 70}" fill="${accent}" font-size="56" font-weight="700" font-family="DejaVu Sans, Arial, sans-serif">TRADER</text>`}

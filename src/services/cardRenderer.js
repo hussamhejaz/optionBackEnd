@@ -262,7 +262,7 @@ function drawFooter(ctx, { x, y, width, pnlValue, pnlPct, expiration, right, log
   ctx.fillStyle = rightText === 'put' ? red : green;
   ctx.fillText(rightText, startX + dateWidth, ty);
 
-  drawCandleIcon(ctx, x + width / 2 - 42, y + 24, 0.72);
+  drawCandleIcon(ctx, x + width / 2 - 42, y + 32, 0.72);
 
   if (logo) {
     const maxLogoW = 250;
