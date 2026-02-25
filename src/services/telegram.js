@@ -15,7 +15,15 @@ async function sendTelegramCardImage(chatId, cardPayload) {
     // propagate meaningful message for missing puppeteer
     throw err;
   }
-  
+
+  // Puppeteer may return Uint8Array in some versions; form-data expects Buffer/Stream.
+  if (!Buffer.isBuffer(buffer)) {
+    if (buffer instanceof Uint8Array) {
+      buffer = Buffer.from(buffer);
+    } else {
+      throw new Error('Card renderer did not return a valid image buffer');
+    }
+  }
 
   const url = `https://api.telegram.org/bot${token}/sendPhoto`;
   const form = new FormData();
@@ -23,7 +31,7 @@ async function sendTelegramCardImage(chatId, cardPayload) {
   if (cardPayload.caption) form.append('caption', cardPayload.caption);
   form.append('photo', buffer, { filename: 'card.png', contentType: 'image/png' });
 
-  const res = await fetch(url, { method: 'POST', body: form });
+  const res = await fetch(url, { method: 'POST', headers: form.getHeaders(), body: form });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.ok) {
     const err = new Error(`Telegram sendPhoto failed: ${res.status} ${JSON.stringify(body)}`);
