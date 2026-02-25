@@ -55,21 +55,22 @@ function getLogoDataUrl(logoBuffer) {
 }
 
 function candleSvg(x, y, scale = 1) {
-  const redBodyW = 28 * scale;
-  const redBodyH = 90 * scale;
-  const redWickX = x + redBodyW / 2 - 2 * scale;
-  const greenBodyW = 28 * scale;
-  const greenBodyH = 120 * scale;
-  const greenX = x + 60 * scale;
-  const greenY = y - 10 * scale;
-  const greenWickX = greenX + greenBodyW / 2 - 2 * scale;
+  const wickW = Math.max(3, 4 * scale);
+  const redBodyW = 24 * scale;
+  const redBodyH = 84 * scale;
+  const redWickX = x + redBodyW / 2 - wickW / 2;
+  const greenBodyW = 24 * scale;
+  const greenBodyH = 110 * scale;
+  const greenX = x + 54 * scale;
+  const greenY = y - 8 * scale;
+  const greenWickX = greenX + greenBodyW / 2 - wickW / 2;
   return `
     <rect x="${x}" y="${y}" width="${redBodyW}" height="${redBodyH}" fill="${red}"/>
-    <rect x="${redWickX}" y="${y - 20 * scale}" width="${4 * scale}" height="${20 * scale}" fill="${red}"/>
-    <rect x="${redWickX}" y="${y + redBodyH}" width="${4 * scale}" height="${20 * scale}" fill="${red}"/>
+    <rect x="${redWickX}" y="${y - 18 * scale}" width="${wickW}" height="${18 * scale}" fill="${red}"/>
+    <rect x="${redWickX}" y="${y + redBodyH}" width="${wickW}" height="${18 * scale}" fill="${red}"/>
     <rect x="${greenX}" y="${greenY}" width="${greenBodyW}" height="${greenBodyH}" fill="${green}"/>
-    <rect x="${greenWickX}" y="${greenY - 30 * scale}" width="${4 * scale}" height="${30 * scale}" fill="${green}"/>
-    <rect x="${greenWickX}" y="${greenY + greenBodyH}" width="${4 * scale}" height="${20 * scale}" fill="${green}"/>
+    <rect x="${greenWickX}" y="${greenY - 24 * scale}" width="${wickW}" height="${24 * scale}" fill="${green}"/>
+    <rect x="${greenWickX}" y="${greenY + greenBodyH}" width="${wickW}" height="${18 * scale}" fill="${green}"/>
   `;
 }
 
@@ -128,7 +129,7 @@ function bodySvg({
   const priceY = y + Math.round(height * 0.38);
   const pnlY = priceY + Math.round(height * 0.12);
   const rightPadding = 50;
-  const colGap = 260;
+  const colGap = 310;
   const valueX = x + width - rightPadding;
   const labelX = valueX - colGap;
   const gap = 52;
@@ -164,7 +165,7 @@ function footerSvg({ x, y, width, pnlValue, pnlPct, expiration, right, logoDataU
     <text x="${leftCenterX}" y="${y + 66}" fill="${green}" font-size="50" font-weight="700" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${formatNum(pnlValue, 0)}$| ${formatNum(pnlPct)}%</text>
     <text x="${leftCenterX - 20}" y="${y + 112}" fill="${dim}" font-size="36" font-weight="500" text-anchor="end" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(dateText)} </text>
     <text x="${leftCenterX - 18}" y="${y + 112}" fill="${rightColor}" font-size="36" font-weight="500" text-anchor="start" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(rightText)}</text>
-    ${candleSvg(x + width / 2 - 48, y + 26, 0.75)}
+    ${candleSvg(x + width / 2 - 42, y + 20, 0.72)}
     ${logoDataUrl
       ? `<image href="${logoDataUrl}" x="${x + width - 250 - 60}" y="${y + 8}" width="250" height="109" preserveAspectRatio="xMidYMid meet"/>`
       : `<text x="${x + width - 280}" y="${y + 70}" fill="${accent}" font-size="56" font-weight="700" font-family="DejaVu Sans, Arial, sans-serif">TRADER</text>`}

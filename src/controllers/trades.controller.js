@@ -528,6 +528,7 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
   // Keep peak price in report only when trade reached the 50$ profit target.
   const useHighPriceForReport = hasReachedProfitTarget && hasHighPriceAboveEntry;
   const reportClosePrice = useHighPriceForReport ? highPrice : closePrice;
+  const reportHighPrice = useHighPriceForReport ? highPrice : reportClosePrice;
   const reportPnlAmount =
     Number.isFinite(entry) && Number.isFinite(reportClosePrice)
       ? (reportClosePrice - entry) * OPTION_MULTIPLIER * contracts
@@ -604,7 +605,7 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
     entryPrice: entry,
     closePrice: Number.isFinite(reportClosePrice) ? reportClosePrice : updates.closePrice,
     closePriceActual: updates.closePriceActual,
-    highPrice: Number.isFinite(highPrice) ? highPrice : null,
+    highPrice: Number.isFinite(reportHighPrice) ? reportHighPrice : null,
     pnlAmount: reportPnlAmount,
     pnlPercent: reportPnlPercent,
     peakPriceReached,

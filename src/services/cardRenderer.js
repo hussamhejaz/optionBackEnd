@@ -37,25 +37,26 @@ function formatCompactCount(n) {
 }
 
 function drawCandleIcon(ctx, x, y, scale = 1) {
-  const redBodyW = 28 * scale;
-  const redBodyH = 90 * scale;
-  const redWickX = x + redBodyW / 2 - 2 * scale;
+  const wickW = Math.max(3, 4 * scale);
+  const redBodyW = 24 * scale;
+  const redBodyH = 84 * scale;
+  const redWickX = x + redBodyW / 2 - wickW / 2;
 
   ctx.fillStyle = red;
   ctx.fillRect(x, y, redBodyW, redBodyH);
-  ctx.fillRect(redWickX, y - 20 * scale, 4 * scale, 20 * scale);
-  ctx.fillRect(redWickX, y + redBodyH, 4 * scale, 20 * scale);
+  ctx.fillRect(redWickX, y - 18 * scale, wickW, 18 * scale);
+  ctx.fillRect(redWickX, y + redBodyH, wickW, 18 * scale);
 
-  const greenBodyW = 28 * scale;
-  const greenBodyH = 120 * scale;
-  const greenX = x + 60 * scale;
-  const greenY = y - 10 * scale;
-  const greenWickX = greenX + greenBodyW / 2 - 2 * scale;
+  const greenBodyW = 24 * scale;
+  const greenBodyH = 110 * scale;
+  const greenX = x + 54 * scale;
+  const greenY = y - 8 * scale;
+  const greenWickX = greenX + greenBodyW / 2 - wickW / 2;
 
   ctx.fillStyle = green;
   ctx.fillRect(greenX, greenY, greenBodyW, greenBodyH);
-  ctx.fillRect(greenWickX, greenY - 30 * scale, 4 * scale, 30 * scale);
-  ctx.fillRect(greenWickX, greenY + greenBodyH, 4 * scale, 20 * scale);
+  ctx.fillRect(greenWickX, greenY - 24 * scale, wickW, 24 * scale);
+  ctx.fillRect(greenWickX, greenY + greenBodyH, wickW, 18 * scale);
 }
 
 function drawUsFlag(ctx, x, y, r) {
@@ -197,7 +198,7 @@ function drawBodyPanel(ctx, {
   ctx.font = '500 38px Sans';
 
   const rightPadding = 50;
-  const colGap = 260;
+  const colGap = 310;
   const valueX = x + width - rightPadding;
   const labelX = valueX - colGap;
 
@@ -261,7 +262,7 @@ function drawFooter(ctx, { x, y, width, pnlValue, pnlPct, expiration, right, log
   ctx.fillStyle = rightText === 'put' ? red : green;
   ctx.fillText(rightText, startX + dateWidth, ty);
 
-  drawCandleIcon(ctx, x + width / 2 - 48, y + 26, 0.75);
+  drawCandleIcon(ctx, x + width / 2 - 42, y + 20, 0.72);
 
   if (logo) {
     const maxLogoW = 250;
