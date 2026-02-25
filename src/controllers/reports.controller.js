@@ -26,6 +26,7 @@ function normalizeReportMetrics(report = {}) {
     Number.isFinite(high) &&
     high > entry;
   const effectiveClose = useHighPriceForReport ? high : close;
+  const effectiveHigh = useHighPriceForReport ? high : effectiveClose;
   const effectivePnlAmount =
     Number.isFinite(entry) && Number.isFinite(effectiveClose)
       ? Number(((effectiveClose - entry) * OPTION_MULTIPLIER * contracts).toFixed(2))
@@ -40,10 +41,34 @@ function normalizeReportMetrics(report = {}) {
     Boolean(report.hasReachedProfit50) ||
     report.successRule === 'PROFIT_TARGET_50_REACHED' ||
     effectivePnlAmount >= 50;
+  const effectivePeakPriceReached = Number.isFinite(effectiveHigh)
+    ? effectiveHigh
+    : Number.isFinite(effectiveClose)
+      ? effectiveClose
+      : toFiniteNumberOrNull(report.peakPriceReached);
+  const effectivePeakRisePrice =
+    Number.isFinite(entry) && Number.isFinite(effectivePeakPriceReached)
+      ? Number((effectivePeakPriceReached - entry).toFixed(4))
+      : toFiniteNumberOrNull(report.peakRisePrice);
+  const effectivePeakRisePercent =
+    Number.isFinite(entry) && Number.isFinite(effectivePeakPriceReached) && entry !== 0
+      ? Number((((effectivePeakPriceReached - entry) / entry) * 100).toFixed(2))
+      : toFiniteNumberOrNull(report.peakRisePercent);
+  const effectivePeakPnlAmount =
+    Number.isFinite(entry) && Number.isFinite(effectivePeakPriceReached)
+      ? Number(((effectivePeakPriceReached - entry) * OPTION_MULTIPLIER * contracts).toFixed(2))
+      : toFiniteNumberOrNull(report.peakPnlAmount);
 
   return {
     ...report,
     closePrice: Number.isFinite(effectiveClose) ? effectiveClose : report.closePrice,
+    highPrice: Number.isFinite(effectiveHigh) ? effectiveHigh : report.highPrice,
+    peakPriceReached:
+      Number.isFinite(effectivePeakPriceReached) ? effectivePeakPriceReached : report.peakPriceReached,
+    peakRisePrice: Number.isFinite(effectivePeakRisePrice) ? effectivePeakRisePrice : report.peakRisePrice,
+    peakRisePercent:
+      Number.isFinite(effectivePeakRisePercent) ? effectivePeakRisePercent : report.peakRisePercent,
+    peakPnlAmount: Number.isFinite(effectivePeakPnlAmount) ? effectivePeakPnlAmount : report.peakPnlAmount,
     pnlAmount: effectivePnlAmount,
     pnlPercent: Number.isFinite(effectivePnlPercent) ? effectivePnlPercent : report.pnlPercent,
     isSuccessful:

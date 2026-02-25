@@ -93,6 +93,50 @@ function toMillis(ts) {
   return 0;
 }
 
+function normalizeTradeReportHighFields(trade = {}) {
+  const normalized = { ...trade };
+  const entry = toFiniteNumberOrNull(normalized.entryPrice);
+  const close = toFiniteNumberOrNull(normalized.reportClosePrice ?? normalized.closePrice);
+  const high = toFiniteNumberOrNull(normalized.highPrice);
+  const contractsRaw = Number(normalized.contracts);
+  const contracts = Number.isFinite(contractsRaw) && contractsRaw > 0 ? contractsRaw : 1;
+  const peakPnlFromHigh =
+    Number.isFinite(entry) && Number.isFinite(high)
+      ? (high - entry) * OPTION_MULTIPLIER * contracts
+      : null;
+  const useHighPriceForReport =
+    Boolean(normalized.usedHighPriceForReport) ||
+    Boolean(normalized.hasReachedProfit50) ||
+    normalized.successRule === 'PROFIT_TARGET_50_REACHED' ||
+    (Number.isFinite(peakPnlFromHigh) && peakPnlFromHigh >= SUCCESS_PROFIT_TARGET_USD);
+
+  const effectiveHigh = useHighPriceForReport ? high : close;
+  const effectivePeakPriceReached = Number.isFinite(effectiveHigh)
+    ? effectiveHigh
+    : toFiniteNumberOrNull(normalized.peakPriceReached);
+  const effectivePeakRisePrice =
+    Number.isFinite(entry) && Number.isFinite(effectivePeakPriceReached)
+      ? Number((effectivePeakPriceReached - entry).toFixed(4))
+      : toFiniteNumberOrNull(normalized.peakRisePrice);
+  const effectivePeakRisePercent =
+    Number.isFinite(entry) && Number.isFinite(effectivePeakPriceReached) && entry !== 0
+      ? Number((((effectivePeakPriceReached - entry) / entry) * 100).toFixed(2))
+      : toFiniteNumberOrNull(normalized.peakRisePercent);
+  const effectivePeakPnlAmount =
+    Number.isFinite(entry) && Number.isFinite(effectivePeakPriceReached)
+      ? Number(((effectivePeakPriceReached - entry) * OPTION_MULTIPLIER * contracts).toFixed(2))
+      : toFiniteNumberOrNull(normalized.peakPnlAmount);
+
+  if (Number.isFinite(effectiveHigh)) normalized.highPrice = effectiveHigh;
+  if (Number.isFinite(effectivePeakPriceReached)) normalized.peakPriceReached = effectivePeakPriceReached;
+  if (Number.isFinite(effectivePeakRisePrice)) normalized.peakRisePrice = effectivePeakRisePrice;
+  if (Number.isFinite(effectivePeakRisePercent)) normalized.peakRisePercent = effectivePeakRisePercent;
+  if (Number.isFinite(effectivePeakPnlAmount)) normalized.peakPnlAmount = effectivePeakPnlAmount;
+  normalized.usedHighPriceForReport =
+    Boolean(normalized.usedHighPriceForReport) || useHighPriceForReport;
+  return normalized;
+}
+
 function hydrateTradeFromReport(trade = {}, report = null) {
   if (!report) return trade;
 
@@ -341,7 +385,7 @@ async function getTrades(req, res, next) {
           trade.priceChangePercent = 0;
         }
         
-        return trade;
+        return status === 'CLOSED' ? normalizeTradeReportHighFields(trade) : trade;
       })
       .sort((a, b) => {
         const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
@@ -368,7 +412,7 @@ async function getTradesDashboard(req, res, next) {
         const percent = entry ? Number(((diff / entry) * 100).toFixed(2)) : 0;
         const amount = Number((diff * OPTION_MULTIPLIER * contracts).toFixed(2));
         const priceDirection = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
-        return {
+        const trade = {
           id: doc.id,
           symbol: data.symbol,
           right: data.right,
@@ -390,6 +434,7 @@ async function getTradesDashboard(req, res, next) {
           priceDirection,
           priceChange: Number(diff.toFixed(2)),
         };
+        return status === 'CLOSED' ? normalizeTradeReportHighFields(trade) : trade;
       })
       .sort((a, b) => {
         const ta = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
