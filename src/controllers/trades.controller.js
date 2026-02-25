@@ -537,10 +537,10 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
     Number.isFinite(entry) && Number.isFinite(reportClosePrice) && entry !== 0
       ? Number((((reportClosePrice - entry) / entry) * 100).toFixed(2))
       : null;
-  const peakPriceReached = Number.isFinite(highPrice)
-    ? highPrice
-    : Number.isFinite(closePrice)
-      ? closePrice
+  const peakPriceReached = Number.isFinite(reportHighPrice)
+    ? reportHighPrice
+    : Number.isFinite(reportClosePrice)
+      ? reportClosePrice
       : null;
   const peakRisePrice =
     Number.isFinite(entry) && Number.isFinite(peakPriceReached)
