@@ -93,6 +93,26 @@ function toMillis(ts) {
   return 0;
 }
 
+function getPeriodStartMillis(period) {
+  const now = Date.now();
+  if (period === 'all') return 0;
+  if (period === 'weekly') return now - (7 * 24 * 60 * 60 * 1000);
+
+  // default: daily (UTC calendar day)
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  return start.getTime();
+}
+
+function resolveWinnerTimestampMillis(trade = {}) {
+  return (
+    toMillis(trade.closedAt) ||
+    toMillis(trade.updatedAt) ||
+    toMillis(trade.createdAt) ||
+    0
+  );
+}
+
 function normalizeTradeReportHighFields(trade = {}) {
   const normalized = { ...trade };
   const entry = toFiniteNumberOrNull(normalized.entryPrice);
@@ -748,6 +768,8 @@ async function getWinningTrades(req, res, next) {
   try {
     const minPnlQuery = Number(req.query?.minPnl);
     const minPnl = Number.isFinite(minPnlQuery) ? minPnlQuery : 50;
+    const period = String(req.query?.period || 'daily').toLowerCase();
+    const periodStartMillis = getPeriodStartMillis(period);
 
     // Fetch open/closed trades + reports, then merge so report-only winners are not lost.
     const [closedSnap, openSnap, reportsSnap] = await Promise.all([
@@ -839,7 +861,9 @@ async function getWinningTrades(req, res, next) {
       addWinnerCandidate(reportTrade);
     });
 
-    const winners = Array.from(winnersById.values()).sort((a, b) => (b.pnl || 0) - (a.pnl || 0));
+    const winners = Array.from(winnersById.values())
+      .filter((trade) => resolveWinnerTimestampMillis(trade) >= periodStartMillis)
+      .sort((a, b) => (b.pnl || 0) - (a.pnl || 0));
     res.json(winners);
   } catch (err) {
     next(err);

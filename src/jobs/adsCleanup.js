@@ -1,42 +1,27 @@
-const { db, admin } = require('../database');
+const { db } = require('../database');
 
 const enabled = String(process.env.ENABLE_ADS_CLEANUP || 'true').toLowerCase() === 'true';
-const intervalMs = Number(process.env.ADS_CLEANUP_INTERVAL_MS || 24 * 60 * 60 * 1000);
+const intervalMs = Number(process.env.ADS_CLEANUP_INTERVAL_MS || 60 * 60 * 1000);
+const retentionMs = Number(process.env.ADS_RETENTION_MS || 24 * 60 * 60 * 1000);
 
 let timer = null;
 let running = false;
 
-function getServerTimestamp() {
-  if (admin && admin.firestore) {
-    return admin.firestore.FieldValue.serverTimestamp();
+function toMillis(ts) {
+  if (!ts) return 0;
+  if (typeof ts.toMillis === 'function') return ts.toMillis();
+  if (typeof ts === 'string') {
+    const parsed = Date.parse(ts);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
-  return new Date().toISOString();
-}
-
-async function suppressAutoAdForTradeIds(tradeIds = []) {
-  const tradesCol = db.collection('trades');
-  const uniqueIds = Array.from(
-    new Set(
-      tradeIds
-        .map((id) => String(id || '').trim())
-        .filter(Boolean)
-    )
-  );
-  if (!uniqueIds.length) return;
-  const ts = getServerTimestamp();
-  await Promise.all(
-    uniqueIds.map((tradeId) =>
-      tradesCol.doc(tradeId).set(
-        {
-          autoAdSuppressedAt: ts,
-          autoAdCreatedAt: ts,
-          autoAdDeletedAt: ts,
-          updatedAt: ts,
-        },
-        { merge: true }
-      )
-    )
-  );
+  if (typeof ts === 'object' && ts.seconds !== undefined) {
+    const seconds = Number(ts.seconds);
+    const nanos = Number(ts.nanoseconds || 0);
+    if (Number.isFinite(seconds) && Number.isFinite(nanos)) {
+      return (seconds * 1000) + (nanos / 1000000);
+    }
+  }
+  return 0;
 }
 
 async function cleanupAdsTick() {
@@ -50,10 +35,23 @@ async function cleanupAdsTick() {
       return;
     }
 
-    const tradeIds = snap.docs.map((doc) => (doc.data() || {}).tradeId);
-    await Promise.all(snap.docs.map((doc) => adsCol.doc(doc.id).delete()));
-    await suppressAutoAdForTradeIds(tradeIds);
-    console.log(`Ads cleanup: deleted ${snap.size} ads`);
+    const now = Date.now();
+    const idsToDelete = snap.docs
+      .filter((doc) => {
+        const ad = doc.data() || {};
+        const createdMs = toMillis(ad.createdAt) || toMillis(ad.updatedAt);
+        if (!Number.isFinite(createdMs) || createdMs <= 0) return false;
+        return (now - createdMs) >= retentionMs;
+      })
+      .map((doc) => doc.id);
+
+    if (!idsToDelete.length) {
+      console.log('Ads cleanup: no expired ads');
+      return;
+    }
+
+    await Promise.all(idsToDelete.map((id) => adsCol.doc(id).delete()));
+    console.log(`Ads cleanup: deleted ${idsToDelete.length} expired ads`);
   } catch (err) {
     console.error('Ads cleanup failed:', err.message);
   } finally {
@@ -70,9 +68,13 @@ function startAdsCleanup() {
     console.log('Ads cleanup disabled due to invalid ADS_CLEANUP_INTERVAL_MS value.');
     return;
   }
+  if (!Number.isFinite(retentionMs) || retentionMs <= 0) {
+    console.log('Ads cleanup disabled due to invalid ADS_RETENTION_MS value.');
+    return;
+  }
   if (timer) return;
   timer = setInterval(cleanupAdsTick, intervalMs);
-  console.log(`Ads cleanup started. Interval: ${intervalMs}ms`);
+  console.log(`Ads cleanup started. Interval: ${intervalMs}ms | retention: ${retentionMs}ms`);
 }
 
 module.exports = { startAdsCleanup };

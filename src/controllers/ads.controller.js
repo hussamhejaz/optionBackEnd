@@ -7,6 +7,7 @@ const TELEGRAM_CHAT_ID_ADS = process.env.TELEGRAM_CHAT_ID_ADS || process.env.TEL
 const TELEGRAM_BOT_TOKEN_ADS = process.env.TELEGRAM_BOT_TOKEN_ADS || process.env.TELEGRAM_BOT_TOKEN;
 const MIN_AD_PROFIT_USD = 50;
 const OPTION_MULTIPLIER = 100;
+const ADS_VISIBILITY_WINDOW_MS = Number(process.env.ADS_RETENTION_MS || 24 * 60 * 60 * 1000);
 
 const adsCol = db.collection('ads');
 const tradesCol = db.collection('trades');
@@ -35,6 +36,17 @@ function shouldIncludeInAdsList(ad) {
   const hasTradeId = Boolean(String(ad?.tradeId || '').trim());
   if (!hasTradeId) return false;
   return meetsMinAdProfitUsd(ad);
+}
+
+function getAdTimestampMillis(ad = {}) {
+  return toMillis(ad.createdAt) || toMillis(ad.updatedAt) || 0;
+}
+
+function isAdWithinVisibilityWindow(ad = {}) {
+  if (!Number.isFinite(ADS_VISIBILITY_WINDOW_MS) || ADS_VISIBILITY_WINDOW_MS <= 0) return true;
+  const adMs = getAdTimestampMillis(ad);
+  if (!Number.isFinite(adMs) || adMs <= 0) return false;
+  return (Date.now() - adMs) < ADS_VISIBILITY_WINDOW_MS;
 }
 
 function deriveLivePnlAmount(trade = {}) {
@@ -351,7 +363,8 @@ async function listAds(req, res, next) {
     const snap = await adsCol.orderBy('createdAt', 'desc').get();
     const ads = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((ad) => shouldIncludeInAdsList(ad));
+      .filter((ad) => shouldIncludeInAdsList(ad))
+      .filter((ad) => isAdWithinVisibilityWindow(ad));
     res.json(ads);
   } catch (err) {
     next(err);
