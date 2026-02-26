@@ -756,7 +756,6 @@ async function getWinningTrades(req, res, next) {
       reportsCollection.get(),
     ]);
     const latestReportByTradeId = new Map();
-    const suppressedTradeIds = new Set();
     reportsSnap.forEach((doc) => {
       const report = doc.data() || {};
       const tradeId = String(report.tradeId || '');
@@ -771,8 +770,6 @@ async function getWinningTrades(req, res, next) {
 
     const addWinnerCandidate = (trade) => {
       if (!trade || !trade.id) return;
-      if (trade.autoAdSuppressedAt) return;
-
       // Trade qualifies if marked successful or has positive PnL.
       const isSuccessful = Boolean(trade.isSuccessful);
       const pnlValue = derivePnlAmount(trade);
@@ -811,21 +808,18 @@ async function getWinningTrades(req, res, next) {
     // First: live winners from OPEN trades (current profit reached threshold).
     openSnap.docs.forEach((doc) => {
       const rawTrade = { id: doc.id, ...doc.data() };
-      if (rawTrade.autoAdSuppressedAt) suppressedTradeIds.add(rawTrade.id);
       addWinnerCandidate(rawTrade);
     });
 
     // Second: winners from CLOSED trade documents (hydrated with latest reports when present)
     closedSnap.docs.forEach((doc) => {
       const rawTrade = { id: doc.id, ...doc.data() };
-      if (rawTrade.autoAdSuppressedAt) suppressedTradeIds.add(rawTrade.id);
       const trade = hydrateTradeFromReport(rawTrade, latestReportByTradeId.get(doc.id) || null);
       addWinnerCandidate(trade);
     });
 
     // Third: fallback winners from reports even if the trade document is missing
     latestReportByTradeId.forEach((report, tradeId) => {
-      if (suppressedTradeIds.has(tradeId)) return;
       if (winnersById.has(tradeId)) return;
       const reportTrade = {
         id: tradeId,
