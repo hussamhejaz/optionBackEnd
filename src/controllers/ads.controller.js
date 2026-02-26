@@ -31,6 +31,12 @@ function meetsMinAdProfitUsd(ad) {
   return Number(ad?.pnlAmount) >= MIN_AD_PROFIT_USD;
 }
 
+function shouldIncludeInAdsList(ad) {
+  const hasTradeId = Boolean(String(ad?.tradeId || '').trim());
+  if (!hasTradeId) return false;
+  return meetsMinAdProfitUsd(ad);
+}
+
 function deriveLivePnlAmount(trade = {}) {
   const direct = Number(trade?.pnl);
   if (Number.isFinite(direct)) return direct;
@@ -345,7 +351,7 @@ async function listAds(req, res, next) {
     const snap = await adsCol.orderBy('createdAt', 'desc').get();
     const ads = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((ad) => meetsMinAdProfitUsd(ad));
+      .filter((ad) => shouldIncludeInAdsList(ad));
     res.json(ads);
   } catch (err) {
     next(err);
