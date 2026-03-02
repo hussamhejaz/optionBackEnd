@@ -59,14 +59,6 @@ async function resolveContractStats({ symbol, expiration, right, strike, quote }
   return { openInterest, volume };
 }
 
-function buildFiftyProfitText({ symbol, right }) {
-  return (
-    `🎉 كفو! حققنا 50$ 💵\n\n` +
-    `💎 العقد: ${String(symbol || '').toUpperCase()} (${String(right || '').toUpperCase()})\n` +
-    `🛡️ يرجى رفع الوقف لسعر الدخول (تأمين الصفقة).`
-  );
-}
-
 function buildAutoAdTitle({ symbol, right, strike }) {
   return `${String(symbol || '').toUpperCase()} ${String(right || '').toUpperCase()} ${strike}`;
 }
@@ -124,7 +116,6 @@ async function processTrade(doc) {
     const shouldSendStepAlert =
       mid >= baseline + alertStep &&
       (!Number.isFinite(lastAlertMid) || Math.abs(lastAlertMid - midRounded) >= 0.005);
-    const shouldSendMilestoneAlert = reachedFiftyDollars && !data.milestone50SentAt;
     const shouldCreateAutoAd =
       hasReachedFifty &&
       !data.autoAdSuppressedAt;
@@ -171,23 +162,8 @@ async function processTrade(doc) {
       updates.lastAlertMid = midRounded;
     }
 
-    // Send only one message if both step update and 50$ milestone happen in the same tick.
-    if (shouldSendStepAlert || shouldSendMilestoneAlert) {
-      const milestoneText = buildFiftyProfitText({ symbol, right });
+    if (shouldSendStepAlert) {
       try {
-        const mergedText =
-          shouldSendStepAlert && shouldSendMilestoneAlert
-            ? `${stepText}\n\n${milestoneText}`
-            : shouldSendStepAlert
-              ? stepText
-              : milestoneText;
-        const mergedCaption =
-          shouldSendStepAlert && shouldSendMilestoneAlert
-            ? `✨ تحديث العقد ✨\n\n${milestoneText}`
-            : shouldSendStepAlert
-              ? '✨ تحديث العقد ✨'
-              : milestoneText;
-
         if (ENABLE_TELEGRAM_IMAGE) {
           try {
             const cardBuffer = await renderTradeCardPNG({
@@ -199,33 +175,30 @@ async function processTrade(doc) {
               mid,
               openInterest: toFiniteNumberOrNull(stats.openInterest),
               volume: toFiniteNumberOrNull(stats.volume),
-              pnlValue: shouldSendMilestoneAlert ? pnlAmount : mid - entry,
+              pnlValue: mid - entry,
               pnlPct: entry ? ((mid - entry) / entry) * 100 : 0,
             });
             await sendTelegramPhoto({
-              caption: mergedCaption,
+              caption: '✨ تحديث العقد ✨',
               imageBuffer: cardBuffer,
               chatId: TELEGRAM_CHAT_ID_TRADES,
               token: TELEGRAM_BOT_TOKEN_TRADES,
             });
           } catch (photoErr) {
             console.error('Telegram image send failed (watcher):', photoErr.message);
-            await sendTelegramMessage(mergedText, {
+            await sendTelegramMessage(stepText, {
               chatId: TELEGRAM_CHAT_ID_TRADES,
               token: TELEGRAM_BOT_TOKEN_TRADES,
             });
           }
         } else {
-          await sendTelegramMessage(mergedText, {
+          await sendTelegramMessage(stepText, {
             chatId: TELEGRAM_CHAT_ID_TRADES,
             token: TELEGRAM_BOT_TOKEN_TRADES,
           });
         }
-        if (shouldSendMilestoneAlert) {
-          updates.milestone50SentAt = getServerTimestamp();
-        }
       } catch (err) {
-        console.error('Telegram send failed (merged update/milestone):', err.message);
+        console.error('Telegram send failed (step update):', err.message);
       }
     }
 
