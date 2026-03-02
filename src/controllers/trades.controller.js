@@ -321,7 +321,7 @@ async function createTrade(req, res, next) {
 
     const creationText =
       `✨ مقترح جديد 🚀\n` +
-       `🌟 ليست توصية للشراء او البيع 🌟\n`
+       `🌟 ليست توصية للشراء او البيع 🌟\n`+
       `🏢 الرمز: ${payload.symbol}\n` +
       `🏷️ النوع: ${String(payload.right).toUpperCase()}\n` +
       `🎯 السترايك: ${payload.strike}\n` +
