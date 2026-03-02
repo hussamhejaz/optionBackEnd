@@ -320,7 +320,8 @@ async function createTrade(req, res, next) {
     res.status(201).json({ id: tradeId, ...payload });
 
     const creationText =
-      `🌟 ليست توصية للشراء او البيع 🌟\n\n` +
+      `✨ مقترح جديد 🚀\n` +
+       `🌟 ليست توصية للشراء او البيع 🌟\n`
       `🏢 الرمز: ${payload.symbol}\n` +
       `🏷️ النوع: ${String(payload.right).toUpperCase()}\n` +
       `🎯 السترايك: ${payload.strike}\n` +
