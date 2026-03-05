@@ -69,7 +69,7 @@ function buildAutoAdTitle({ symbol, right, strike }) {
 }
 
 function getHighPriceReference(trade = {}) {
-  const candidates = [trade.entryPrice, trade.lastMidPrice, trade.lastNotifiedPrice]
+  const candidates = [trade.entryPrice, trade.lastMidPrice]
     .map((value) => Number(value))
     .filter((value) => Number.isFinite(value) && value > 0);
   if (!candidates.length) return null;

@@ -122,7 +122,7 @@ function sanitizeOpenTradeHighPrice(trade = {}) {
   const high = toFiniteNumberOrNull(trade.highPrice);
   if (!Number.isFinite(high)) return null;
 
-  const referenceCandidates = [trade.entryPrice, trade.lastMidPrice, trade.lastNotifiedPrice]
+  const referenceCandidates = [trade.entryPrice, trade.lastMidPrice]
     .map((value) => Number(value))
     .filter((value) => Number.isFinite(value) && value > 0);
   if (!referenceCandidates.length) return high;
@@ -499,7 +499,13 @@ async function getHighestHighPrice(req, res, next) {
     const status = (req.query.status || 'OPEN').toUpperCase();
     const snap = await collection.where('status', '==', status).get();
     const best = snap.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .map((doc) => {
+        const trade = { id: doc.id, ...doc.data() };
+        if (status !== 'CLOSED') {
+          trade.highPrice = sanitizeOpenTradeHighPrice(trade);
+        }
+        return trade;
+      })
       .filter((t) => Number.isFinite(t.highPrice))
       .sort((a, b) => b.highPrice - a.highPrice)[0];
 
