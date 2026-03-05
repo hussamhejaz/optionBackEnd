@@ -140,9 +140,11 @@ async function processTrade(doc) {
       updates.reachedProfit50At = getServerTimestamp();
     }
 
-    const shouldSendStepAlert =
+    const shouldSendStepAlertByStep =
       mid >= baseline + alertStep &&
       (!Number.isFinite(lastAlertMid) || Math.abs(lastAlertMid - midRounded) >= 0.005);
+    const shouldSendStepAlert = shouldSendStepAlertByStep || reachedFiftyNow;
+    const shouldSendProfit50Alert = hasReachedFifty && !data.milestone50SentAt;
     const shouldCreateAutoAd =
       hasReachedFifty &&
       !data.autoAdSuppressedAt;
@@ -151,15 +153,16 @@ async function processTrade(doc) {
     let reached = null;
     if (shouldSendStepAlert) {
       reached = roundToStep(mid - baseline, alertStep) + baseline;
-      stepText =
-        `✨ <b>تحديث العقد</b> ✨\n\n` +
-        `Symbol: ${symbol}\n` +
-        `Type: ${String(right).toUpperCase()}\n` +
-        `Strike: ${strike}\n` +
-        `Exp: ${expiration}\n` +
-        `Mid: ${mid.toFixed(2)}\n` +
-        `Reached: ${reached.toFixed(2)}\n` +
-        `Time: ${new Date().toISOString()}`;
+      stepText = reachedFiftyNow
+        ? '✨ تحديث العقد ✨'
+        : `✨ <b>تحديث العقد</b> ✨\n\n` +
+          `Symbol: ${symbol}\n` +
+          `Type: ${String(right).toUpperCase()}\n` +
+          `Strike: ${strike}\n` +
+          `Exp: ${expiration}\n` +
+          `Mid: ${mid.toFixed(2)}\n` +
+          `Reached: ${reached.toFixed(2)}\n` +
+          `Time: ${new Date().toISOString()}`;
 
       console.log(
         `UP ALERT => ${symbol} ${String(right).toUpperCase()} ${strike} exp ${expiration} | Mid: ${mid.toFixed(
@@ -226,6 +229,26 @@ async function processTrade(doc) {
         }
       } catch (err) {
         console.error('Telegram send failed (step update):', err.message);
+      }
+    }
+
+    if (shouldSendProfit50Alert) {
+      const pnlForMilestone =
+        Number.isFinite(entry) && Number.isFinite(mid)
+          ? Number(((mid - entry) * 100 * contracts).toFixed(2))
+          : null;
+      const milestoneText =
+        `🎉 كفو! حققنا 50$ 💵\n\n` +
+        `💎 العقد: ${String(symbol || '').toUpperCase()} (${String(right).toUpperCase()})\n` +
+        `🛡️ يرجى رفع الوقف لسعر الدخول (تأمين الصفقة).`;
+      try {
+        await sendTelegramMessage(milestoneText, {
+          chatId: TELEGRAM_CHAT_ID_TRADES,
+          token: TELEGRAM_BOT_TOKEN_TRADES,
+        });
+        updates.milestone50SentAt = getServerTimestamp();
+      } catch (err) {
+        console.error('Telegram send failed (50$ milestone):', err.message);
       }
     }
 
