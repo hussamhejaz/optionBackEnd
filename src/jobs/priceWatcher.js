@@ -150,11 +150,15 @@ async function processTrade(doc) {
       !data.autoAdSuppressedAt;
 
     let stepText = '';
+    const milestoneText =
+      `🎉 كفو! حققنا 50$ 💵\n\n` +
+      `💎 العقد: ${String(symbol || '').toUpperCase()} (${String(right).toUpperCase()})\n` +
+      `🛡️ يرجى رفع الوقف لسعر الدخول (تأمين الصفقة).`;
     let reached = null;
     if (shouldSendStepAlert) {
       reached = roundToStep(mid - baseline, alertStep) + baseline;
       stepText = reachedFiftyNow
-        ? '✨ تحديث العقد ✨'
+        ? `✨ تحديث العقد ✨\n\n${milestoneText}`
         : `✨ <b>تحديث العقد</b> ✨\n\n` +
           `Symbol: ${symbol}\n` +
           `Type: ${String(right).toUpperCase()}\n` +
@@ -192,6 +196,7 @@ async function processTrade(doc) {
       updates.lastAlertMid = midRounded;
     }
 
+    let stepAlertSent = false;
     if (shouldSendStepAlert) {
       try {
         if (ENABLE_TELEGRAM_IMAGE) {
@@ -209,23 +214,26 @@ async function processTrade(doc) {
               pnlPct: entry ? ((mid - entry) / entry) * 100 : 0,
             });
             await sendTelegramPhoto({
-              caption: '✨ تحديث العقد ✨',
+              caption: reachedFiftyNow ? stepText : '✨ تحديث العقد ✨',
               imageBuffer: cardBuffer,
               chatId: TELEGRAM_CHAT_ID_TRADES,
               token: TELEGRAM_BOT_TOKEN_TRADES,
             });
+            stepAlertSent = true;
           } catch (photoErr) {
             console.error('Telegram image send failed (watcher):', photoErr.message);
             await sendTelegramMessage(stepText, {
               chatId: TELEGRAM_CHAT_ID_TRADES,
               token: TELEGRAM_BOT_TOKEN_TRADES,
             });
+            stepAlertSent = true;
           }
         } else {
           await sendTelegramMessage(stepText, {
             chatId: TELEGRAM_CHAT_ID_TRADES,
             token: TELEGRAM_BOT_TOKEN_TRADES,
           });
+          stepAlertSent = true;
         }
       } catch (err) {
         console.error('Telegram send failed (step update):', err.message);
@@ -233,19 +241,14 @@ async function processTrade(doc) {
     }
 
     if (shouldSendProfit50Alert) {
-      const pnlForMilestone =
-        Number.isFinite(entry) && Number.isFinite(mid)
-          ? Number(((mid - entry) * 100 * contracts).toFixed(2))
-          : null;
-      const milestoneText =
-        `🎉 كفو! حققنا 50$ 💵\n\n` +
-        `💎 العقد: ${String(symbol || '').toUpperCase()} (${String(right).toUpperCase()})\n` +
-        `🛡️ يرجى رفع الوقف لسعر الدخول (تأمين الصفقة).`;
       try {
-        await sendTelegramMessage(milestoneText, {
-          chatId: TELEGRAM_CHAT_ID_TRADES,
-          token: TELEGRAM_BOT_TOKEN_TRADES,
-        });
+        // If 50$ is reached now, milestone text is already included in step alert caption.
+        if (!(reachedFiftyNow && stepAlertSent)) {
+          await sendTelegramMessage(milestoneText, {
+            chatId: TELEGRAM_CHAT_ID_TRADES,
+            token: TELEGRAM_BOT_TOKEN_TRADES,
+          });
+        }
         updates.milestone50SentAt = getServerTimestamp();
       } catch (err) {
         console.error('Telegram send failed (50$ milestone):', err.message);
