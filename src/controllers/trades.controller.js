@@ -35,6 +35,11 @@ const TELEGRAM_BOT_TOKEN_TRADES =
 const OPTION_MULTIPLIER = 100; // standard equity option multiplier
 const SUCCESS_PROFIT_TARGET_USD = 50;
 const MIN_AD_AUTO_PROFIT_USD = 50;
+const openHighPriceSanityMultiplierRaw = Number(process.env.HIGH_PRICE_SANITY_MULTIPLIER || 8);
+const OPEN_HIGH_PRICE_SANITY_MULTIPLIER =
+  Number.isFinite(openHighPriceSanityMultiplierRaw) && openHighPriceSanityMultiplierRaw > 1
+    ? openHighPriceSanityMultiplierRaw
+    : 8;
 const createTradeWriteTimeoutRaw = Number(process.env.CREATE_TRADE_WRITE_TIMEOUT_MS || 60000);
 const createTradeWriteRecoveryRaw = Number(process.env.CREATE_TRADE_WRITE_RECOVERY_MS || 60000);
 const CREATE_TRADE_WRITE_TIMEOUT_MS =
@@ -111,6 +116,22 @@ function resolveWinnerTimestampMillis(trade = {}) {
     toMillis(trade.createdAt) ||
     0
   );
+}
+
+function sanitizeOpenTradeHighPrice(trade = {}) {
+  const high = toFiniteNumberOrNull(trade.highPrice);
+  if (!Number.isFinite(high)) return null;
+
+  const referenceCandidates = [trade.entryPrice, trade.lastMidPrice, trade.lastNotifiedPrice]
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (!referenceCandidates.length) return high;
+
+  const reference = Math.max(...referenceCandidates);
+  if (high > (reference * OPEN_HIGH_PRICE_SANITY_MULTIPLIER)) {
+    return Number(reference.toFixed(2));
+  }
+  return high;
 }
 
 function normalizeTradeReportHighFields(trade = {}) {
@@ -405,7 +426,11 @@ async function getTrades(req, res, next) {
           trade.priceChange = 0;
           trade.priceChangePercent = 0;
         }
-        
+
+        if (status !== 'CLOSED') {
+          trade.highPrice = sanitizeOpenTradeHighPrice(trade);
+        }
+
         return status === 'CLOSED' ? normalizeTradeReportHighFields(trade) : trade;
       })
       .sort((a, b) => {
@@ -442,7 +467,7 @@ async function getTradesDashboard(req, res, next) {
           status: data.status,
           entryPrice: entry,
           currentPrice: current,
-          highPrice: data.highPrice ?? null,
+          highPrice: sanitizeOpenTradeHighPrice(data),
           openInterest: Number.isFinite(Number(data.openInterest)) ? Number(data.openInterest) : null,
           volume: Number.isFinite(Number(data.volume)) ? Number(data.volume) : null,
           statsUpdatedAt: data.statsUpdatedAt ?? null,

@@ -12,6 +12,11 @@ const TELEGRAM_BOT_TOKEN_TRADES =
 const enabled = String(process.env.ENABLE_WATCHER).toLowerCase() === 'true';
 const intervalMs = Number(process.env.WATCH_INTERVAL_MS || 800);
 const alertStep = Number(process.env.ALERT_STEP || 0.1);
+const highPriceSanityMultiplierRaw = Number(process.env.HIGH_PRICE_SANITY_MULTIPLIER || 8);
+const HIGH_PRICE_SANITY_MULTIPLIER =
+  Number.isFinite(highPriceSanityMultiplierRaw) && highPriceSanityMultiplierRaw > 1
+    ? highPriceSanityMultiplierRaw
+    : 8;
 const MAX_TRADES = 10000; // Support 100+ trades
 
 let timer = null;
@@ -63,6 +68,22 @@ function buildAutoAdTitle({ symbol, right, strike }) {
   return `${String(symbol || '').toUpperCase()} ${String(right || '').toUpperCase()} ${strike}`;
 }
 
+function getHighPriceReference(trade = {}) {
+  const candidates = [trade.entryPrice, trade.lastMidPrice, trade.lastNotifiedPrice]
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (!candidates.length) return null;
+  return Math.max(...candidates);
+}
+
+function sanitizeHighCandidate(value, reference) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  if (!Number.isFinite(reference) || reference <= 0) return numeric;
+  if (numeric > (reference * HIGH_PRICE_SANITY_MULTIPLIER)) return reference;
+  return numeric;
+}
+
 async function processTrade(doc) {
   const data = doc.data();
   const { symbol, expiration, right, strike } = data;
@@ -82,8 +103,14 @@ async function processTrade(doc) {
     const contracts = Number.isFinite(data.contracts) ? data.contracts : 1;
     const pnlAmount = (mid - entry) * 100 * contracts;
     const pnlPercent = entry ? ((mid - entry) / entry) * 100 : 0;
-    const previousHighPrice = Number.isFinite(data.highPrice) ? Number(data.highPrice) : null;
-    const highForCheck = Number.isFinite(previousHighPrice) ? Math.max(previousHighPrice, mid) : mid;
+    const highReference = getHighPriceReference(data);
+    const previousHighPrice = sanitizeHighCandidate(data.highPrice, highReference);
+    const midForHighCheck = sanitizeHighCandidate(mid, highReference);
+    const highForCheck = Number.isFinite(previousHighPrice)
+      ? Math.max(previousHighPrice, Number.isFinite(midForHighCheck) ? midForHighCheck : previousHighPrice)
+      : Number.isFinite(midForHighCheck)
+        ? midForHighCheck
+        : mid;
     const highPnlAmount =
       Number.isFinite(entry) && Number.isFinite(highForCheck)
         ? (highForCheck - entry) * 100 * contracts
