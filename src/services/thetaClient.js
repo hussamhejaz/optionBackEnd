@@ -1,7 +1,10 @@
 const fetch = require('node-fetch');
 const { URL } = require('node:url');
 
-const BASE = process.env.THETA_BASE_URL || 'http://127.0.0.1:25503';
+const RAW_BASE = process.env.THETA_BASE_URL || 'http://127.0.0.1:25503/v3';
+// Remove trailing slashes to avoid double //
+const BASE = String(RAW_BASE).replace(/\/+$/, '');
+
 const THETA_REQUEST_TIMEOUT_MS = Number(process.env.THETA_REQUEST_TIMEOUT_MS || 10000);
 
 function toFiniteNumberOrNull(value) {
@@ -21,7 +24,11 @@ function buildParams({ symbol, expiration, right, strike }) {
 
 async function fetchSnapshotRow({ type, symbol, expiration, right, strike }) {
   const params = buildParams({ symbol, expiration, right, strike });
-  const url = `${BASE}/v3/option/snapshot/${type}?${params.toString()}`;
+
+  // NOTE: BASE already includes /v3 (from .env)
+  // Example: http://127.0.0.1:25503/v3/option/snapshot/ohlc?...
+  const url = `${BASE}/option/snapshot/${type}?${params.toString()}`;
+
   const res = await fetchTheta(url, `theta ${type}`);
   if (!res.ok) {
     const body = await res.text();
@@ -35,7 +42,9 @@ async function fetchSnapshotRow({ type, symbol, expiration, right, strike }) {
 }
 
 async function getFpssStatus() {
-  const url = `${BASE}/v3/terminal/fpss/status`;
+  // NOTE: BASE already includes /v3
+  const url = `${BASE}/terminal/fpss/status`;
+
   const res = await fetchTheta(url, 'theta fpss status');
   if (!res.ok) {
     const body = await res.text();
@@ -61,7 +70,9 @@ async function getOptionQuote({ symbol, expiration, right, strike }) {
     format: 'json',
   });
 
-  const url = `${BASE}/v3/option/snapshot/quote?${params.toString()}`;
+  // NOTE: BASE already includes /v3
+  const url = `${BASE}/option/snapshot/quote?${params.toString()}`;
+
   const res = await fetchTheta(url, 'theta quote');
   if (!res.ok) {
     const body = await res.text();
