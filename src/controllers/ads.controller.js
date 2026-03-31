@@ -37,12 +37,12 @@ function shouldIncludeInAdsList(ad) {
   return meetsMinAdProfitUsd(ad);
 }
 
-function getAdTimestampMillis(ad = {}) {
-  return toMillis(ad.createdAt) || toMillis(ad.updatedAt) || 0;
+function getAdCreatedAtMillis(ad = {}) {
+  return toMillis(ad.createdAt) || 0;
 }
 
 function isAdFromToday(ad = {}) {
-  const adMs = getAdTimestampMillis(ad);
+  const adMs = getAdCreatedAtMillis(ad);
   if (!Number.isFinite(adMs) || adMs <= 0) return false;
 
   const now = new Date();
