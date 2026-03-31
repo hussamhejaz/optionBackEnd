@@ -2,14 +2,29 @@ const fetch = require('node-fetch');
 const { URL } = require('node:url');
 
 const RAW_BASE = process.env.THETA_BASE_URL || 'http://127.0.0.1:25503/v3';
-// Remove trailing slashes to avoid double //
-const BASE = String(RAW_BASE).replace(/\/+$/, '');
+const BASE = normalizeThetaBaseUrl(RAW_BASE);
 
 const THETA_REQUEST_TIMEOUT_MS = Number(process.env.THETA_REQUEST_TIMEOUT_MS || 10000);
 
 function toFiniteNumberOrNull(value) {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
+}
+
+function normalizeThetaBaseUrl(rawBase) {
+  const fallback = 'http://127.0.0.1:25503/v3';
+  const cleaned = String(rawBase || fallback).trim().replace(/\/+$/, '');
+  if (!cleaned) return fallback;
+
+  try {
+    const parsed = new URL(cleaned);
+    if (!/\/v\d+$/i.test(parsed.pathname)) {
+      parsed.pathname = `${parsed.pathname.replace(/\/+$/, '')}/v3`;
+    }
+    return parsed.toString().replace(/\/+$/, '');
+  } catch {
+    return cleaned;
+  }
 }
 
 function buildParams({ symbol, expiration, right, strike }) {
@@ -25,8 +40,6 @@ function buildParams({ symbol, expiration, right, strike }) {
 async function fetchSnapshotRow({ type, symbol, expiration, right, strike }) {
   const params = buildParams({ symbol, expiration, right, strike });
 
-  // NOTE: BASE already includes /v3 (from .env)
-  // Example: http://127.0.0.1:25503/v3/option/snapshot/ohlc?...
   const url = `${BASE}/option/snapshot/${type}?${params.toString()}`;
 
   const res = await fetchTheta(url, `theta ${type}`);
@@ -42,7 +55,6 @@ async function fetchSnapshotRow({ type, symbol, expiration, right, strike }) {
 }
 
 async function getFpssStatus() {
-  // NOTE: BASE already includes /v3
   const url = `${BASE}/terminal/fpss/status`;
 
   const res = await fetchTheta(url, 'theta fpss status');
@@ -70,7 +82,6 @@ async function getOptionQuote({ symbol, expiration, right, strike }) {
     format: 'json',
   });
 
-  // NOTE: BASE already includes /v3
   const url = `${BASE}/option/snapshot/quote?${params.toString()}`;
 
   const res = await fetchTheta(url, 'theta quote');

@@ -1,5 +1,5 @@
 const { db, admin } = require('../database');
-const { getOptionQuote, getOptionContractStats } = require('../services/thetaClient');
+const { getOptionQuote, getOptionContractStats, getFpssStatus } = require('../services/thetaClient');
 const { sendTelegramMessage, sendTelegramPhoto } = require('../services/telegramService');
 const { renderTradeCardPNG } = require('../services/cardRenderer');
 
@@ -10,17 +10,33 @@ const TELEGRAM_BOT_TOKEN_TRADES =
   process.env.TELEGRAM_BOT_TOKEN_TRADES || process.env.TELEGRAM_BOT_TOKEN;
 
 const enabled = String(process.env.ENABLE_WATCHER).toLowerCase() === 'true';
-const intervalMs = Number(process.env.WATCH_INTERVAL_MS || 800);
-const alertStep = Number(process.env.ALERT_STEP || 0.1);
+const intervalMs = Number(process.env.WATCH_INTERVAL_MS || process.env.PRICE_WATCH_INTERVAL_MS || 800);
+const alertStep = Number(process.env.ALERT_STEP || process.env.PRICE_STEP || 0.1);
 const highPriceSanityMultiplierRaw = Number(process.env.HIGH_PRICE_SANITY_MULTIPLIER || 8);
 const HIGH_PRICE_SANITY_MULTIPLIER =
   Number.isFinite(highPriceSanityMultiplierRaw) && highPriceSanityMultiplierRaw > 1
     ? highPriceSanityMultiplierRaw
     : 8;
+const thetaPreflightIntervalRaw = Number(process.env.THETA_PREFLIGHT_INTERVAL_MS || 5000);
+const THETA_PREFLIGHT_INTERVAL_MS =
+  Number.isFinite(thetaPreflightIntervalRaw) && thetaPreflightIntervalRaw >= 0
+    ? thetaPreflightIntervalRaw
+    : 5000;
+const thetaUnavailableLogIntervalRaw = Number(process.env.THETA_UNAVAILABLE_LOG_INTERVAL_MS || 15000);
+const THETA_UNAVAILABLE_LOG_INTERVAL_MS =
+  Number.isFinite(thetaUnavailableLogIntervalRaw) && thetaUnavailableLogIntervalRaw >= 0
+    ? thetaUnavailableLogIntervalRaw
+    : 15000;
+const watcherStatsLoggingEnabled =
+  String(process.env.WATCHER_STATS_LOGGING || 'false').toLowerCase() === 'true';
 const MAX_TRADES = 10000; // Support 100+ trades
 
 let timer = null;
 let tickRunning = false;
+let lastThetaPreflightAt = 0;
+let thetaReady = false;
+let thetaStatusLabel = null;
+let lastThetaUnavailableLogAt = 0;
 
 function roundToStep(value, step) {
   return Number((Math.floor(value / step) * step).toFixed(2));
@@ -40,6 +56,76 @@ function getServerTimestamp() {
   return new Date().toISOString();
 }
 
+function parseThetaStatusLabel(statusPayload) {
+  if (!statusPayload) return null;
+  if (typeof statusPayload === 'string') return statusPayload.trim().toUpperCase() || null;
+  const candidates = [
+    statusPayload.status,
+    statusPayload.fpssStatus,
+    statusPayload.connectionStatus,
+    statusPayload.state,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim().toUpperCase();
+    }
+  }
+  return null;
+}
+
+function shouldLogThetaUnavailable(now = Date.now()) {
+  return now - lastThetaUnavailableLogAt >= THETA_UNAVAILABLE_LOG_INTERVAL_MS;
+}
+
+function logThetaUnavailable(message) {
+  const now = Date.now();
+  if (!shouldLogThetaUnavailable(now)) return;
+  lastThetaUnavailableLogAt = now;
+  console.warn(message);
+}
+
+function isThetaSessionInvalid(err) {
+  const message = String(err?.message || '').toLowerCase();
+  const responseBody = String(err?.responseBody || '').toLowerCase();
+  return (
+    err?.statusCode === 478 ||
+    message.includes('invalid session id') ||
+    responseBody.includes('invalid session id')
+  );
+}
+
+function markThetaUnavailable(message) {
+  thetaReady = false;
+  thetaStatusLabel = null;
+  lastThetaPreflightAt = 0;
+  logThetaUnavailable(message);
+}
+
+async function ensureThetaReady() {
+  const now = Date.now();
+  if (thetaReady && now - lastThetaPreflightAt < THETA_PREFLIGHT_INTERVAL_MS) {
+    return true;
+  }
+
+  lastThetaPreflightAt = now;
+
+  try {
+    const statusPayload = await getFpssStatus();
+    const statusLabel = parseThetaStatusLabel(statusPayload);
+    thetaStatusLabel = statusLabel;
+    thetaReady = !statusLabel || statusLabel === 'CONNECTED';
+
+    if (!thetaReady) {
+      logThetaUnavailable(`Price watcher paused: Theta status is ${statusLabel}.`);
+    }
+
+    return thetaReady;
+  } catch (err) {
+    markThetaUnavailable(`Price watcher paused: Theta is unavailable (${err.message}).`);
+    return false;
+  }
+}
+
 async function resolveContractStats({ symbol, expiration, right, strike, quote }) {
   let openInterest = toFiniteNumberOrNull(quote?.openInterest);
   let volume = toFiniteNumberOrNull(quote?.volume);
@@ -57,9 +143,11 @@ async function resolveContractStats({ symbol, expiration, right, strike, quote }
     }
   }
 
-  console.log(
-    `watcher stats ${contractKey} | openInterest=${openInterest ?? 'null'} | volume=${volume ?? 'null'}`
-  );
+  if (watcherStatsLoggingEnabled) {
+    console.log(
+      `watcher stats ${contractKey} | openInterest=${openInterest ?? 'null'} | volume=${volume ?? 'null'}`
+    );
+  }
 
   return { openInterest, volume };
 }
@@ -307,6 +395,10 @@ async function processTrade(doc) {
 
     await doc.ref.set(updates, { merge: true });
   } catch (err) {
+    if (isThetaSessionInvalid(err)) {
+      markThetaUnavailable(`Price watcher paused: Theta session is invalid (${err.message}).`);
+      return;
+    }
     const msg = err?.message || '';
     if (msg.includes('No data found')) {
       // Mark invalid contract and stop processing.
@@ -331,6 +423,11 @@ async function tick() {
   try {
     const snap = await db.collection('trades').where('status', '==', 'OPEN').limit(MAX_TRADES).get();
     const docs = snap.docs;
+    if (!docs.length) return;
+
+    const ready = await ensureThetaReady();
+    if (!ready) return;
+
     await Promise.all(docs.map(processTrade));
   } catch (err) {
     console.error('Price watcher tick failed:', err.message);

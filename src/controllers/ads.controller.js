@@ -7,7 +7,6 @@ const TELEGRAM_CHAT_ID_ADS = process.env.TELEGRAM_CHAT_ID_ADS || process.env.TEL
 const TELEGRAM_BOT_TOKEN_ADS = process.env.TELEGRAM_BOT_TOKEN_ADS || process.env.TELEGRAM_BOT_TOKEN;
 const MIN_AD_PROFIT_USD = 50;
 const OPTION_MULTIPLIER = 100;
-const ADS_VISIBILITY_WINDOW_MS = Number(process.env.ADS_RETENTION_MS || 24 * 60 * 60 * 1000);
 
 const adsCol = db.collection('ads');
 const tradesCol = db.collection('trades');
@@ -42,11 +41,15 @@ function getAdTimestampMillis(ad = {}) {
   return toMillis(ad.createdAt) || toMillis(ad.updatedAt) || 0;
 }
 
-function isAdWithinVisibilityWindow(ad = {}) {
-  if (!Number.isFinite(ADS_VISIBILITY_WINDOW_MS) || ADS_VISIBILITY_WINDOW_MS <= 0) return true;
+function isAdFromToday(ad = {}) {
   const adMs = getAdTimestampMillis(ad);
   if (!Number.isFinite(adMs) || adMs <= 0) return false;
-  return (Date.now() - adMs) < ADS_VISIBILITY_WINDOW_MS;
+
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+
+  return adMs >= startOfToday && adMs < startOfTomorrow;
 }
 
 function deriveLivePnlAmount(trade = {}) {
@@ -364,7 +367,7 @@ async function listAds(req, res, next) {
     const ads = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((ad) => shouldIncludeInAdsList(ad))
-      .filter((ad) => isAdWithinVisibilityWindow(ad));
+      .filter((ad) => isAdFromToday(ad));
     res.json(ads);
   } catch (err) {
     next(err);
