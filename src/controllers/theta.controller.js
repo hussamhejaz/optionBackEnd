@@ -1,5 +1,10 @@
 const thetaClient = require('../services/thetaClient');
 const { getFpssStatus, getOptionQuote, getIndexPrice } = thetaClient;
+const { sendTelegramMessage } = require('../services/telegramService');
+
+const TELEGRAM_CHAT_ID_TRADES = process.env.TELEGRAM_CHAT_ID_TRADES || process.env.TELEGRAM_CHAT_ID;
+const TELEGRAM_BOT_TOKEN_TRADES =
+  process.env.TELEGRAM_BOT_TOKEN_TRADES || process.env.TELEGRAM_BOT_TOKEN;
 
 async function status(req, res, next) {
   try {
@@ -53,6 +58,25 @@ async function indexPrice(req, res, next) {
 
     const quote = await getIndexPrice({ symbol });
     res.json(quote);
+
+    const telegramText =
+      `✨ تحديث مؤشر 🚀\n\n` +
+      `🌟 ليست توصية للشراء او البيع 🌟\n\n` +
+      `🏢 الرمز: ${quote.symbol}\n` +
+      `💵 السعر: ${quote.price}\n` +
+      `🕒 الوقت: ${quote.timestamp || new Date().toISOString()}`;
+
+    void (async () => {
+      try {
+        await sendTelegramMessage(telegramText, {
+          chatId: TELEGRAM_CHAT_ID_TRADES,
+          token: TELEGRAM_BOT_TOKEN_TRADES,
+        });
+        console.log(`Telegram sent (index price) for ${quote.symbol}`);
+      } catch (telegramErr) {
+        console.error(`Telegram send failed (index price) for ${quote.symbol}:`, telegramErr.message);
+      }
+    })();
   } catch (err) {
     if (err.statusCode === 472 || err.statusCode === 404) {
       return res.status(404).json({

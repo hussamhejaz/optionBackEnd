@@ -371,18 +371,21 @@ async function createTrade(req, res, next) {
               chatId: TELEGRAM_CHAT_ID_TRADES,
               token: TELEGRAM_BOT_TOKEN_TRADES,
             });
+            console.log(`Telegram photo sent (new trade) for ${tradeId}`);
           } catch (photoErr) {
             console.error(`Telegram image send failed (new trade) for ${tradeId}:`, photoErr.message);
             await sendTelegramMessage(creationText, {
               chatId: TELEGRAM_CHAT_ID_TRADES,
               token: TELEGRAM_BOT_TOKEN_TRADES,
             });
+            console.log(`Telegram text sent after photo fallback (new trade) for ${tradeId}`);
           }
         } else {
           await sendTelegramMessage(creationText, {
             chatId: TELEGRAM_CHAT_ID_TRADES,
             token: TELEGRAM_BOT_TOKEN_TRADES,
           });
+          console.log(`Telegram text sent (new trade) for ${tradeId}`);
         }
       } catch (err) {
         console.error(`Telegram send failed (new trade) for ${tradeId}:`, err.message);

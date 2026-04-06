@@ -8,8 +8,7 @@ async function sendTelegramMessage(text, options = {}) {
   const token = options.token || defaultToken;
   const chatId = options.chatId || defaultChatId;
   if (!token || !chatId) {
-    console.warn('Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)');
-    return;
+    throw new Error('Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)');
   }
 
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
@@ -28,11 +27,10 @@ async function sendTelegramMessage(text, options = {}) {
     const body = await res.json().catch(() => ({}));
     if (res.ok && body?.ok) {
       return body;
-    } else {
-      console.error('Telegram send failed:', body || res.statusText);
     }
+    throw new Error(`Telegram send failed (${res.status}): ${JSON.stringify(body || res.statusText)}`);
   } catch (err) {
-    console.error('Telegram send failed:', err.message);
+    throw err;
   }
 }
 
