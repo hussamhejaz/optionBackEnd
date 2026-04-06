@@ -237,7 +237,7 @@ async function withTimeout(promise, ms, label) {
 async function createTrade(req, res, next) {
   try {
     requireFields(req.body, ['symbol', 'right', 'strike', 'expiration']);
-    const symbol = String(req.body.symbol).toUpperCase();
+    let symbol = String(req.body.symbol).toUpperCase();
     const right = normalizeRight(req.body.right);
     const expiration = normalizeExpiration(req.body.expiration);
     const strike = normalizeStrike(req.body.strike);
@@ -273,6 +273,7 @@ async function createTrade(req, res, next) {
         return res.status(400).json({ message: 'Invalid option contract (no data from market)' });
       }
       entryPrice = quote.mid;
+      if (quote.symbol) symbol = String(quote.symbol).toUpperCase();
     } catch (err) {
       const msg = err?.message || '';
       if (msg.includes('No data found')) {

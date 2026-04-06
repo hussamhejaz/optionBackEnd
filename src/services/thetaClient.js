@@ -37,6 +37,32 @@ function buildParams({ symbol, expiration, right, strike }) {
   });
 }
 
+function getOptionSymbolCandidates(rawSymbol) {
+  const symbol = String(rawSymbol || '').trim().toUpperCase();
+  if (!symbol) return [];
+
+  const aliases = {
+    SPX: ['SPXW'],
+    SPXW: ['SPX'],
+    NDX: ['NDXP'],
+    NDXP: ['NDX'],
+    RUT: ['RUTW'],
+    RUTW: ['RUT'],
+  };
+
+  const extras = aliases[symbol] || [];
+  return Array.from(new Set([symbol, ...extras]));
+}
+
+function isNoDataResponse(statusCode, body = '') {
+  const lowered = String(body || '').toLowerCase();
+  return (
+    statusCode === 404 ||
+    lowered.includes('no data found') ||
+    lowered.includes('no data')
+  );
+}
+
 async function fetchSnapshotRow({ type, symbol, expiration, right, strike }) {
   const params = buildParams({ symbol, expiration, right, strike });
 
@@ -74,38 +100,48 @@ async function getFpssStatus() {
 }
 
 async function getOptionQuote({ symbol, expiration, right, strike }) {
-  const params = new URLSearchParams({
-    symbol,
-    expiration,
-    right,
-    strike: String(strike),
-    format: 'json',
-  });
+  const symbolCandidates = getOptionSymbolCandidates(symbol);
 
-  const url = `${BASE}/option/snapshot/quote?${params.toString()}`;
+  for (const symbolCandidate of symbolCandidates) {
+    const params = new URLSearchParams({
+      symbol: symbolCandidate,
+      expiration,
+      right,
+      strike: String(strike),
+      format: 'json',
+    });
+    const url = `${BASE}/option/snapshot/quote?${params.toString()}`;
 
-  const res = await fetchTheta(url, 'theta quote');
-  if (!res.ok) {
-    const body = await res.text();
-    const err = new Error(`theta quote failed ${res.status}: ${body}`);
-    err.statusCode = res.status;
-    err.responseBody = body;
-    throw err;
+    const res = await fetchTheta(url, `theta quote (${symbolCandidate})`);
+    if (!res.ok) {
+      const body = await res.text();
+      if (isNoDataResponse(res.status, body)) continue;
+
+      const err = new Error(`theta quote failed ${res.status}: ${body}`);
+      err.statusCode = res.status;
+      err.responseBody = body;
+      throw err;
+    }
+
+    const json = await res.json();
+    const row = json?.response?.[0]?.data?.[0];
+    if (!row) continue;
+
+    const bid = Number(row?.bid);
+    const ask = Number(row?.ask);
+    if (!Number.isFinite(bid) || !Number.isFinite(ask)) {
+      continue;
+    }
+
+    const mid = Number(((bid + ask) / 2).toFixed(2));
+    const openInterest = toFiniteNumberOrNull(row?.open_interest);
+    const volume = toFiniteNumberOrNull(row?.volume);
+    return { bid, ask, mid, openInterest, volume, symbol: symbolCandidate };
   }
 
-  const json = await res.json();
-  const row = json?.response?.[0]?.data?.[0];
-
-  const bid = Number(row?.bid);
-  const ask = Number(row?.ask);
-  if (!Number.isFinite(bid) || !Number.isFinite(ask)) {
-    throw new Error('theta quote missing bid/ask');
-  }
-
-  const mid = Number(((bid + ask) / 2).toFixed(2));
-  const openInterest = toFiniteNumberOrNull(row?.open_interest);
-  const volume = toFiniteNumberOrNull(row?.volume);
-  return { bid, ask, mid, openInterest, volume };
+  const err = new Error('No data found for option contract');
+  err.statusCode = 404;
+  throw err;
 }
 
 async function getIndexPrice({ symbol }) {
@@ -212,16 +248,26 @@ function isTimeoutErr(err) {
 }
 
 async function getOptionContractStats({ symbol, expiration, right, strike }) {
-  const [oiRes, ohlcRes] = await Promise.allSettled([
-    fetchSnapshotRow({ type: 'open_interest', symbol, expiration, right, strike }),
-    fetchSnapshotRow({ type: 'ohlc', symbol, expiration, right, strike }),
-  ]);
+  const symbolCandidates = getOptionSymbolCandidates(symbol);
+  for (const symbolCandidate of symbolCandidates) {
+    const [oiRes, ohlcRes] = await Promise.allSettled([
+      fetchSnapshotRow({ type: 'open_interest', symbol: symbolCandidate, expiration, right, strike }),
+      fetchSnapshotRow({ type: 'ohlc', symbol: symbolCandidate, expiration, right, strike }),
+    ]);
 
-  const oiRow = oiRes.status === 'fulfilled' ? oiRes.value : null;
-  const ohlcRow = ohlcRes.status === 'fulfilled' ? ohlcRes.value : null;
+    const oiRow = oiRes.status === 'fulfilled' ? oiRes.value : null;
+    const ohlcRow = ohlcRes.status === 'fulfilled' ? ohlcRes.value : null;
+    const openInterest = toFiniteNumberOrNull(oiRow?.open_interest);
+    const volume = toFiniteNumberOrNull(ohlcRow?.volume);
+
+    if (openInterest !== null || volume !== null) {
+      return { openInterest, volume };
+    }
+  }
+
   return {
-    openInterest: toFiniteNumberOrNull(oiRow?.open_interest),
-    volume: toFiniteNumberOrNull(ohlcRow?.volume),
+    openInterest: null,
+    volume: null,
   };
 }
 
