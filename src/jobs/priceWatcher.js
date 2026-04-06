@@ -242,7 +242,7 @@ async function processTrade(doc) {
     const milestoneText =
       `🎉 كفو! حققنا 50$ 💵\n\n` +
       `💎 العقد: ${String(symbol || '').toUpperCase()} (${String(right).toUpperCase()})\n` +
-      `🛡️ يرجى رفع الوقف لسعر الدخول (تأمين الصفقة).`;
+      `🛡️  (تأمين الصفقة).`;
     let reached = null;
     if (shouldSendStepAlert) {
       reached = roundToStep(mid - baseline, alertStep) + baseline;
