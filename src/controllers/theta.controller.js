@@ -1,5 +1,5 @@
 const thetaClient = require('../services/thetaClient');
-const { getFpssStatus, getOptionQuote } = thetaClient;
+const { getFpssStatus, getOptionQuote, getIndexPrice } = thetaClient;
 
 async function status(req, res, next) {
   try {
@@ -42,4 +42,26 @@ async function optionQuote(req, res, next) {
   }
 }
 
-module.exports = { status, optionQuote };
+async function indexPrice(req, res, next) {
+  try {
+    const { symbol } = req.query;
+    if (!symbol) {
+      const error = new Error('symbol is required');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const quote = await getIndexPrice({ symbol });
+    res.json(quote);
+  } catch (err) {
+    if (err.statusCode === 472 || err.statusCode === 404) {
+      return res.status(404).json({
+        message: 'Index price not available',
+        detail: err.responseBody || err.message,
+      });
+    }
+    next(err);
+  }
+}
+
+module.exports = { status, optionQuote, indexPrice };

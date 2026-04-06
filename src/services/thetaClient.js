@@ -108,6 +108,38 @@ async function getOptionQuote({ symbol, expiration, right, strike }) {
   return { bid, ask, mid, openInterest, volume };
 }
 
+async function getIndexPrice({ symbol }) {
+  const params = new URLSearchParams({
+    symbol,
+    format: 'json',
+  });
+
+  const url = `${BASE}/index/snapshot/price?${params.toString()}`;
+
+  const res = await fetchTheta(url, 'theta index price');
+  if (!res.ok) {
+    const body = await res.text();
+    const err = new Error(`theta index price failed ${res.status}: ${body}`);
+    err.statusCode = res.status;
+    err.responseBody = body;
+    throw err;
+  }
+
+  const json = await res.json();
+  const row = Array.isArray(json) ? json[0] : json?.response?.[0]?.data?.[0];
+  const price = Number(row?.price);
+
+  if (!Number.isFinite(price)) {
+    throw new Error('theta index price missing price');
+  }
+
+  return {
+    symbol: String(row?.symbol || symbol).trim(),
+    timestamp: row?.timestamp || null,
+    price,
+  };
+}
+
 async function fetchTheta(url, label) {
   const timeoutMs = Number.isFinite(THETA_REQUEST_TIMEOUT_MS) ? THETA_REQUEST_TIMEOUT_MS : 10000;
   const options = timeoutMs > 0 ? { timeout: timeoutMs } : undefined;
@@ -180,4 +212,4 @@ async function getOptionContractStats({ symbol, expiration, right, strike }) {
   };
 }
 
-module.exports = { getOptionQuote, getOptionContractStats, getFpssStatus };
+module.exports = { getOptionQuote, getOptionContractStats, getFpssStatus, getIndexPrice };

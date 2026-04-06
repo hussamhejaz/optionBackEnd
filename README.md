@@ -32,6 +32,7 @@ FIREBASE_PRIVATE_KEY=
 ## Theta test endpoints
 - `GET /api/theta/status`
 - `GET /api/theta/option-quote?symbol=AAPL&expiration=20250220&right=call&strike=200`
+- `GET /api/theta/index-price?symbol=SPX`
 
 ## Trades
 - `POST /api/trades` body: `{ symbol, right, strike, expiration, entryPrice?, stopLoss? }`

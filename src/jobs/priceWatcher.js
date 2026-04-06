@@ -37,6 +37,7 @@ let lastThetaPreflightAt = 0;
 let thetaReady = false;
 let thetaStatusLabel = null;
 let lastThetaUnavailableLogAt = 0;
+let preflightTimer = null;
 
 function roundToStep(value, step) {
   return Number((Math.floor(value / step) * step).toFixed(2));
@@ -442,10 +443,47 @@ function startWatcher() {
     console.log('Price watcher disabled by ENABLE_WATCHER flag.');
     return;
   }
-  if (timer) return;
-  timer = setInterval(tick, intervalMs);
-  tick();
-  console.log(`Price watcher started. Interval: ${intervalMs}ms, step: ${alertStep}`);
+  if (timer || preflightTimer) return;
+
+  // Start a preflight checker that waits for Theta to become ready.
+  // Once ready, clear the preflight and start the main watcher interval.
+  preflightTimer = setInterval(async () => {
+    try {
+      const ready = await ensureThetaReady();
+      if (ready) {
+        clearInterval(preflightTimer);
+        preflightTimer = null;
+        if (!timer) {
+          timer = setInterval(tick, intervalMs);
+          tick();
+          console.log(`Price watcher started. Interval: ${intervalMs}ms, step: ${alertStep}`);
+        }
+      } else {
+        console.log('Price watcher preflight: Theta not ready, retrying...');
+      }
+    } catch (err) {
+      console.error('Price watcher preflight error:', err.message || err);
+    }
+  }, THETA_PREFLIGHT_INTERVAL_MS);
+  // Run an immediate preflight check without waiting for the first interval tick.
+  (async () => {
+    try {
+      const ready = await ensureThetaReady();
+      if (ready) {
+        if (preflightTimer) {
+          clearInterval(preflightTimer);
+          preflightTimer = null;
+        }
+        if (!timer) {
+          timer = setInterval(tick, intervalMs);
+          tick();
+          console.log(`Price watcher started. Interval: ${intervalMs}ms, step: ${alertStep}`);
+        }
+      }
+    } catch (err) {
+      console.error('Price watcher initial preflight error:', err.message || err);
+    }
+  })();
 }
 
 module.exports = { startWatcher };
