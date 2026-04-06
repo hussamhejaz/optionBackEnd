@@ -347,8 +347,7 @@ async function createTrade(req, res, next) {
       `🏢 الرمز: ${payload.symbol}\n` +
       `🏷️ النوع: ${String(payload.right).toUpperCase()}\n` +
       `🎯 السترايك: ${payload.strike}\n` +
-      `📅 التاريخ: ${formatExpirationForCaption(payload.expiration)}\n` +
-      `}`;
+      `📅 التاريخ: ${formatExpirationForCaption(payload.expiration)}\n`;
 
     void (async () => {
       try {
