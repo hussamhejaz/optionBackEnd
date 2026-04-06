@@ -126,11 +126,24 @@ async function getIndexPrice({ symbol }) {
   }
 
   const json = await res.json();
-  const row = Array.isArray(json) ? json[0] : json?.response?.[0]?.data?.[0];
+  const row = Array.isArray(json)
+    ? json[0]
+    : json?.response?.[0]?.data?.[0] || json?.response?.[0] || null;
+
+  if (!row) {
+    const err = new Error('theta index price returned no data');
+    err.statusCode = 404;
+    err.responseBody = JSON.stringify(json);
+    throw err;
+  }
+
   const price = Number(row?.price);
 
   if (!Number.isFinite(price)) {
-    throw new Error('theta index price missing price');
+    const err = new Error('theta index price missing price');
+    err.statusCode = 502;
+    err.responseBody = JSON.stringify(json);
+    throw err;
   }
 
   return {
