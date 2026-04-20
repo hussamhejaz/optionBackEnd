@@ -190,7 +190,7 @@ function drawBodyPanel(ctx, {
 
   ctx.fillStyle = deltaColor;
   ctx.font = '600 32px Sans';
-  ctx.fillText(`${formatNum(pnlValue)} $  ${formatNum(pnlPct)}%`, leftCenterX, pnlY);
+  ctx.fillText(`${formatNum(pnlValue, 2)} $  ${formatNum(pnlPct)}%`, leftCenterX, pnlY);
   ctx.textAlign = 'left';
 
   // ===== Right stats =====
