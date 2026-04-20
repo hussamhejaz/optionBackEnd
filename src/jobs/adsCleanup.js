@@ -1,27 +1,29 @@
 const { db } = require('../database');
 
 const enabled = String(process.env.ENABLE_ADS_CLEANUP || 'true').toLowerCase() === 'true';
-const intervalMs = Number(process.env.ADS_CLEANUP_INTERVAL_MS || 60 * 60 * 1000);
-const retentionMs = Number(process.env.ADS_RETENTION_MS || 24 * 60 * 60 * 1000);
+const cleanupHour = Number(process.env.ADS_CLEANUP_HOUR || 1);
+const cleanupMinute = Number(process.env.ADS_CLEANUP_MINUTE || 0);
 
 let timer = null;
 let running = false;
 
-function toMillis(ts) {
-  if (!ts) return 0;
-  if (typeof ts.toMillis === 'function') return ts.toMillis();
-  if (typeof ts === 'string') {
-    const parsed = Date.parse(ts);
-    return Number.isFinite(parsed) ? parsed : 0;
+function getNextCleanupDelayMs(now = new Date()) {
+  const nextRun = new Date(now);
+  nextRun.setHours(cleanupHour, cleanupMinute, 0, 0);
+  if (nextRun <= now) {
+    nextRun.setDate(nextRun.getDate() + 1);
   }
-  if (typeof ts === 'object' && ts.seconds !== undefined) {
-    const seconds = Number(ts.seconds);
-    const nanos = Number(ts.nanoseconds || 0);
-    if (Number.isFinite(seconds) && Number.isFinite(nanos)) {
-      return (seconds * 1000) + (nanos / 1000000);
-    }
-  }
-  return 0;
+  return nextRun.getTime() - now.getTime();
+}
+
+function scheduleNextCleanup() {
+  const delayMs = getNextCleanupDelayMs();
+  timer = setTimeout(async () => {
+    await cleanupAdsTick();
+    scheduleNextCleanup();
+  }, delayMs);
+  const nextRun = new Date(Date.now() + delayMs);
+  console.log(`Ads cleanup scheduled for ${nextRun.toLocaleString()}`);
 }
 
 async function cleanupAdsTick() {
@@ -35,23 +37,8 @@ async function cleanupAdsTick() {
       return;
     }
 
-    const now = Date.now();
-    const idsToDelete = snap.docs
-      .filter((doc) => {
-        const ad = doc.data() || {};
-        const createdMs = toMillis(ad.createdAt) || toMillis(ad.updatedAt);
-        if (!Number.isFinite(createdMs) || createdMs <= 0) return false;
-        return (now - createdMs) >= retentionMs;
-      })
-      .map((doc) => doc.id);
-
-    if (!idsToDelete.length) {
-      console.log('Ads cleanup: no expired ads');
-      return;
-    }
-
-    await Promise.all(idsToDelete.map((id) => adsCol.doc(id).delete()));
-    console.log(`Ads cleanup: deleted ${idsToDelete.length} expired ads`);
+    await Promise.all(snap.docs.map((doc) => adsCol.doc(doc.id).delete()));
+    console.log(`Ads cleanup: deleted ${snap.size} ads`);
   } catch (err) {
     console.error('Ads cleanup failed:', err.message);
   } finally {
@@ -64,17 +51,24 @@ function startAdsCleanup() {
     console.log('Ads cleanup disabled by ENABLE_ADS_CLEANUP flag.');
     return;
   }
-  if (!Number.isFinite(intervalMs) || intervalMs <= 0) {
-    console.log('Ads cleanup disabled due to invalid ADS_CLEANUP_INTERVAL_MS value.');
-    return;
-  }
-  if (!Number.isFinite(retentionMs) || retentionMs <= 0) {
-    console.log('Ads cleanup disabled due to invalid ADS_RETENTION_MS value.');
+  if (
+    !Number.isInteger(cleanupHour) ||
+    cleanupHour < 0 ||
+    cleanupHour > 23 ||
+    !Number.isInteger(cleanupMinute) ||
+    cleanupMinute < 0 ||
+    cleanupMinute > 59
+  ) {
+    console.log('Ads cleanup disabled due to invalid ADS_CLEANUP_HOUR or ADS_CLEANUP_MINUTE value.');
     return;
   }
   if (timer) return;
-  timer = setInterval(cleanupAdsTick, intervalMs);
-  console.log(`Ads cleanup started. Interval: ${intervalMs}ms | retention: ${retentionMs}ms`);
+  scheduleNextCleanup();
+  console.log(
+    `Ads cleanup started. Daily delete time: ${String(cleanupHour).padStart(2, '0')}:${String(
+      cleanupMinute
+    ).padStart(2, '0')}`
+  );
 }
 
 module.exports = { startAdsCleanup };
