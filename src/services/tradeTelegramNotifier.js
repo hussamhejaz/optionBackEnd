@@ -103,38 +103,13 @@ async function ensureTradeTelegramRootMessage({ tradeId, trade = {}, chatId }) {
   if (!tradeId) return { ok: false, error: 'missing tradeId' };
 
   try {
-    const rootCaption = buildTradeRootText(tradeId, trade);
-    if (ENABLE_TELEGRAM_IMAGE) {
-      try {
-        const entry = Number(trade.entryPrice);
-        const mid = Number.isFinite(entry) ? entry : Number(trade.mid ?? trade.lastMidPrice ?? 0);
-        const cardBuffer = await renderTradeCardPNG(buildTradeCardPayload({
-          ...trade,
-          mid,
-          pnlValue: 0,
-          pnlPct: 0,
-        }));
-        const photoResponse = await sendTelegramPhoto({
-          caption: rootCaption,
-          imageBuffer: cardBuffer,
-          chatId,
-          token: TELEGRAM_BOT_TOKEN_TRADES,
-        });
-        const photoMeta = extractTelegramMeta(photoResponse, chatId);
-        await persistTradeTelegramRootMeta(tradeId, photoMeta);
-        return { ok: true, ...photoMeta, reused: false };
-      } catch (photoErr) {
-        console.error(`Failed to create Telegram root image (${tradeId}):`, photoErr.message);
-      }
-    }
-
-    const textResponse = await sendTelegramMessage(rootCaption, {
+    const response = await sendTelegramMessage(buildTradeRootText(tradeId, trade), {
       chatId,
       token: TELEGRAM_BOT_TOKEN_TRADES,
     });
-    const textMeta = extractTelegramMeta(textResponse, chatId);
-    await persistTradeTelegramRootMeta(tradeId, textMeta);
-    return { ok: true, ...textMeta, reused: false };
+    const meta = extractTelegramMeta(response, chatId);
+    await persistTradeTelegramRootMeta(tradeId, meta);
+    return { ok: true, ...meta, reused: false };
   } catch (err) {
     console.error(`Failed to create Telegram root message (${tradeId}):`, err.message);
     return { ok: false, error: err.message };
