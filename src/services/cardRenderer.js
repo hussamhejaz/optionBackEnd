@@ -362,27 +362,6 @@ function drawFooter(ctx, { x, y, width, pnlValue, pnlPct, expiration, right, log
   ctx.textAlign = 'left';
 }
 
-function resolvePnlMetrics({ entryPrice, mid, pnlValue, pnlPct }) {
-  const entry = Number(entryPrice);
-  const current = Number(mid);
-  const directPnlValue = Number(pnlValue);
-  const directPnlPct = Number(pnlPct);
-
-  const derivedPnlValue =
-    Number.isFinite(entry) && Number.isFinite(current)
-      ? (current - entry)
-      : 0;
-  const resolvedPnlValue = Number.isFinite(directPnlValue) ? directPnlValue : derivedPnlValue;
-
-  const derivedPnlPct =
-    Number.isFinite(entry) && Number.isFinite(current) && entry !== 0
-      ? (((current - entry) / entry) * 100)
-      : 0;
-  const resolvedPnlPct = Number.isFinite(directPnlPct) ? directPnlPct : derivedPnlPct;
-
-  return { pnlValue: resolvedPnlValue, pnlPct: resolvedPnlPct };
-}
-
 function renderDefaultCard(ctx, {
   width,
   height,
@@ -534,8 +513,6 @@ async function renderTradeCardPNG({
   logoBuffer,
   variant = 'default',
 }) {
-  const resolvedPnl = resolvePnlMetrics({ entryPrice, mid, pnlValue, pnlPct });
-
   const payload = {
     symbol,
     strike,
@@ -545,8 +522,8 @@ async function renderTradeCardPNG({
     mid,
     openInterest,
     volume,
-    pnlValue: resolvedPnl.pnlValue,
-    pnlPct: resolvedPnl.pnlPct,
+    pnlValue,
+    pnlPct,
     logoBuffer,
     variant,
   };
@@ -581,8 +558,8 @@ async function renderTradeCardPNG({
         mid,
         openInterest,
         volume,
-        pnlValue: resolvedPnl.pnlValue,
-        pnlPct: resolvedPnl.pnlPct,
+        pnlValue,
+        pnlPct,
         logo,
       });
     } else {
@@ -596,8 +573,8 @@ async function renderTradeCardPNG({
         mid,
         openInterest,
         volume,
-        pnlValue: resolvedPnl.pnlValue,
-        pnlPct: resolvedPnl.pnlPct,
+        pnlValue,
+        pnlPct,
         
         logo,
       });
