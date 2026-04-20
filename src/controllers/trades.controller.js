@@ -314,6 +314,8 @@ async function createTrade(req, res, next) {
       lastNotifiedPrice: Number.isFinite(entryPrice) ? Number(entryPrice.toFixed(2)) : null,
       lastMidPrice: null,
       lastQuoteAt: null,
+      closeReason: null,
+      closeReasonAt: null,
       telegramMessageId: null,
       telegramChatId: null,
       telegramSentAt: null,
@@ -340,7 +342,7 @@ async function createTrade(req, res, next) {
     res.status(201).json({ id: tradeId, ...payload });
 
     const creationText =
-      `✨ مقترح جديد 🚀\n\n` +
+      `✨ مقترح جديد 🚀\n\n` +sasa
        `🌟 ليست توصية للشراء او البيع 🌟\n\n`+
       `🏢 الرمز: ${payload.symbol}\n` +
       `🏷️ النوع: ${String(payload.right).toUpperCase()}\n` +
@@ -647,6 +649,8 @@ async function finalizeClose({ id, reason, closePriceOverride, stopLossValue }) 
   const updates = {
     status: 'CLOSED',
     closedAt,
+    closeReason: reason,
+    closeReasonAt: closedAt,
     closePrice: Number.isFinite(reportClosePrice) ? reportClosePrice : null,
     closePriceActual: Number.isFinite(closePrice) ? closePrice : null,
     pnl: reportPnlAmount,
