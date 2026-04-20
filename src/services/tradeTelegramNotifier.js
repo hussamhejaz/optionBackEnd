@@ -1,6 +1,5 @@
 const { sendTelegramMessage, sendTelegramPhoto } = require('./telegramService');
 const { renderTradeCardPNG } = require('./cardRenderer');
-const { db } = require('../database');
 
 const ENABLE_TELEGRAM_IMAGE =
   String(process.env.ENABLE_TELEGRAM_IMAGE || 'false').toLowerCase() === 'true';
@@ -97,30 +96,13 @@ async function sendTradeUpdateReply({
   imageCaption = null,
   imagePayload = null,
 }) {
-  let resolvedTrade = trade || {};
-  const initialReplyToRaw = Number(resolvedTrade?.telegramMessageId);
-  const hasInitialReplyTarget = Number.isInteger(initialReplyToRaw);
-
-  // Guard against stale in-memory trade snapshots (common in watcher ticks).
-  // If reply metadata is missing in the snapshot, fetch the latest trade doc once.
-  if (!hasInitialReplyTarget && tradeId) {
-    try {
-      const latest = await db.collection('trades').doc(tradeId).get();
-      if (latest.exists) {
-        resolvedTrade = { ...latest.data(), ...resolvedTrade };
-      }
-    } catch (readErr) {
-      console.error(`Failed to fetch latest trade for Telegram reply (${tradeId}):`, readErr.message);
-    }
-  }
-
-  const replyToRaw = Number(resolvedTrade?.telegramMessageId);
+  const replyToRaw = Number(trade?.telegramMessageId);
   const replyToMessageId = Number.isInteger(replyToRaw) ? replyToRaw : null;
-  const chatId = resolveTradeChatId(resolvedTrade);
+  const chatId = resolveTradeChatId(trade);
 
   async function sendOnce(replyTo) {
     if (preferImage && ENABLE_TELEGRAM_IMAGE) {
-      const cardBuffer = await renderTradeCardPNG(imagePayload || buildTradeCardPayload(resolvedTrade));
+      const cardBuffer = await renderTradeCardPNG(imagePayload || buildTradeCardPayload(trade));
       return sendTelegramPhoto({
         caption: imageCaption || text,
         imageBuffer: cardBuffer,
