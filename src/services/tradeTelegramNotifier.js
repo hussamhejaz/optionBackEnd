@@ -5,6 +5,7 @@ const { db } = require('../database');
 const ENABLE_TELEGRAM_IMAGE =
   String(process.env.ENABLE_TELEGRAM_IMAGE || 'false').toLowerCase() === 'true';
 const TELEGRAM_CHAT_ID_TRADES = process.env.TELEGRAM_CHAT_ID_TRADES || process.env.TELEGRAM_CHAT_ID;
+const TELEGRAM_CHAT_ID_DEFAULT = process.env.TELEGRAM_CHAT_ID;
 const TELEGRAM_BOT_TOKEN_TRADES =
   process.env.TELEGRAM_BOT_TOKEN_TRADES || process.env.TELEGRAM_BOT_TOKEN;
 
@@ -58,6 +59,32 @@ function resolveTradeChatId(trade = {}) {
   const fromTrade = String(trade.telegramChatId || '').trim();
   if (fromTrade) return fromTrade;
   return TELEGRAM_CHAT_ID_TRADES;
+}
+
+function shouldRetryDefaultChat(err, chatId) {
+  const defaultChatId = String(TELEGRAM_CHAT_ID_DEFAULT || '').trim();
+  const currentChatId = String(chatId || '').trim();
+  return (
+    defaultChatId &&
+    defaultChatId !== currentChatId &&
+    /chat not found/i.test(String(err?.message || ''))
+  );
+}
+
+async function sendTradeTelegramMessage(text, { chatId, token, replyToMessageId } = {}) {
+  try {
+    return await sendTelegramMessage(text, { chatId, token, replyToMessageId });
+  } catch (err) {
+    if (!shouldRetryDefaultChat(err, chatId)) throw err;
+    console.warn(
+      `Telegram chat ${chatId} not found. Retrying trade message in default chat ${TELEGRAM_CHAT_ID_DEFAULT}.`
+    );
+    return sendTelegramMessage(text, {
+      chatId: TELEGRAM_CHAT_ID_DEFAULT,
+      token,
+      replyToMessageId: undefined,
+    });
+  }
 }
 
 async function persistTradeTelegramRootMeta(tradeId, meta = {}) {
@@ -128,7 +155,7 @@ async function ensureTradeTelegramRootMessage({ tradeId, trade = {}, chatId }) {
       }
     }
 
-    const textResponse = await sendTelegramMessage(rootCaption, {
+    const textResponse = await sendTradeTelegramMessage(rootCaption, {
       chatId,
       token: TELEGRAM_BOT_TOKEN_TRADES,
     });
@@ -142,8 +169,16 @@ async function ensureTradeTelegramRootMessage({ tradeId, trade = {}, chatId }) {
 }
 
 async function sendNewTradeCard({ tradeId, trade, caption }) {
+  const chatId = resolveTradeChatId(trade);
   try {
-    const chatId = resolveTradeChatId(trade);
+    const response = await sendTradeTelegramMessage(caption, {
+      chatId,
+      token: TELEGRAM_BOT_TOKEN_TRADES,
+    });
+    return { ok: true, ...extractTelegramMeta(response, chatId) };
+  } catch (err) {
+    console.error(`Telegram text send failed (new trade ${tradeId}):`, err.message);
+
     if (ENABLE_TELEGRAM_IMAGE) {
       try {
         const cardBuffer = await renderTradeCardPNG(buildTradeCardPayload(trade));
@@ -159,12 +194,6 @@ async function sendNewTradeCard({ tradeId, trade, caption }) {
       }
     }
 
-    const response = await sendTelegramMessage(caption, {
-      chatId,
-      token: TELEGRAM_BOT_TOKEN_TRADES,
-    });
-    return { ok: true, ...extractTelegramMeta(response, chatId) };
-  } catch (err) {
     console.error(`Telegram send failed (new trade ${tradeId}):`, err.message);
     return { ok: false, error: err.message };
   }
@@ -232,7 +261,7 @@ async function sendTradeUpdateReply({
       });
     }
 
-    return sendTelegramMessage(text, {
+    return sendTradeTelegramMessage(text, {
       chatId,
       token: TELEGRAM_BOT_TOKEN_TRADES,
       replyToMessageId: replyTo,
@@ -253,7 +282,7 @@ async function sendTradeUpdateReply({
       : `Telegram update send failed (trade ${tradeId}). Retrying as plain message:`;
     console.error(contextMessage, err.message);
     try {
-      const fallbackResponse = await sendTelegramMessage(text, {
+      const fallbackResponse = await sendTradeTelegramMessage(text, {
         chatId,
         token: TELEGRAM_BOT_TOKEN_TRADES,
       });
