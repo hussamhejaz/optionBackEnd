@@ -342,8 +342,8 @@ async function createTrade(req, res, next) {
     res.status(201).json({ id: tradeId, ...payload });
 
     const creationText =
-      `✨ مقترح جديد 🚀\n\n` +sasa
-       `🌟 ليست توصية للشراء او البيع 🌟\n\n`+
+      `✨ مقترح جديد 🚀\n\n` +
+      `🌟 ليست توصية للشراء او البيع 🌟\n\n` +
       `🏢 الرمز: ${payload.symbol}\n` +
       `🏷️ النوع: ${String(payload.right).toUpperCase()}\n` +
       `🎯 السترايك: ${payload.strike}\n` +
@@ -373,6 +373,8 @@ async function createTrade(req, res, next) {
           console.log(
             `Telegram trade root message saved for ${tradeId} (message_id=${sendResult.telegramMessageId})`
           );
+        } else if (sendResult && sendResult.ok === false) {
+          console.error(`Telegram send failed (new trade) for ${tradeId}:`, sendResult.error);
         }
       } catch (err) {
         console.error(`Telegram post-send persistence failed (new trade) for ${tradeId}:`, err.message);
