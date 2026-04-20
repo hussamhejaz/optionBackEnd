@@ -337,7 +337,6 @@ async function createTrade(req, res, next) {
           : {}),
         reused: true,
         ...(telegramResult ? { telegramNewTradeSend: telegramResult.ok } : {}),
-        ...(telegramResult?.error ? { telegramNewTradeError: telegramResult.error } : {}),
       });
     }
 
@@ -442,7 +441,6 @@ async function createTrade(req, res, next) {
           }
         : {}),
       telegramNewTradeSend: telegramResult.ok,
-      ...(telegramResult?.error ? { telegramNewTradeError: telegramResult.error } : {}),
     });
 
     void (async () => {
