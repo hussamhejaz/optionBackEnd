@@ -7,8 +7,6 @@ const defaultChatId = process.env.TELEGRAM_CHAT_ID;
 async function sendTelegramMessage(text, options = {}) {
   const token = options.token || defaultToken;
   const chatId = options.chatId || defaultChatId;
-  const replyToMessageIdRaw = Number(options.replyToMessageId);
-  const replyToMessageId = Number.isInteger(replyToMessageIdRaw) ? replyToMessageIdRaw : null;
   if (!token || !chatId) {
     throw new Error('Telegram not configured (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)');
   }
@@ -19,7 +17,6 @@ async function sendTelegramMessage(text, options = {}) {
     text,
     parse_mode: 'HTML',
   };
-  if (replyToMessageId !== null) payload.reply_to_message_id = replyToMessageId;
 
   try {
     const res = await fetch(url, {
@@ -42,7 +39,6 @@ async function sendTelegramPhoto({
   chatId,
   photoBuffer,
   caption,
-  replyToMessageId,
   // Backward-compatible aliases used by existing callers in this codebase:
   imageBuffer,
   token: tokenOverride,
@@ -50,8 +46,6 @@ async function sendTelegramPhoto({
   const token = botToken || tokenOverride || defaultToken;
   const resolvedChatId = chatId || defaultChatId;
   const resolvedPhotoBuffer = photoBuffer || imageBuffer;
-  const replyToMessageIdRaw = Number(replyToMessageId);
-  const resolvedReplyToMessageId = Number.isInteger(replyToMessageIdRaw) ? replyToMessageIdRaw : null;
 
   if (!token || !resolvedChatId) {
     throw new Error('Telegram not configured (missing bot token or chat id)');
@@ -64,9 +58,6 @@ async function sendTelegramPhoto({
   const form = new FormData();
   form.append('chat_id', resolvedChatId);
   if (caption) form.append('caption', caption);
-  if (resolvedReplyToMessageId !== null) {
-    form.append('reply_to_message_id', String(resolvedReplyToMessageId));
-  }
   form.append('photo', resolvedPhotoBuffer, { filename: 'card.png', contentType: 'image/png' });
 
   const res = await fetch(url, {

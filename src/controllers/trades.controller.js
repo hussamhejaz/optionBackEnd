@@ -24,8 +24,13 @@ function getServerTimestamp() {
 }
 const { requireFields } = require('../utils/validators');
 const { getOptionQuote, getOptionContractStats } = require('../services/thetaClient');
-const { sendNewTradeCard, sendTradeUpdateReply } = require('../services/tradeTelegramNotifier');
+const { sendTelegramMessage, sendTelegramPhoto } = require('../services/telegramService');
+const { renderTradeCardPNG } = require('../services/cardRenderer');
+const ENABLE_TELEGRAM_IMAGE =
+  String(process.env.ENABLE_TELEGRAM_IMAGE || 'false').toLowerCase() === 'true';
 const TELEGRAM_CHAT_ID_TRADES = process.env.TELEGRAM_CHAT_ID_TRADES || process.env.TELEGRAM_CHAT_ID;
+const TELEGRAM_BOT_TOKEN_TRADES =
+  process.env.TELEGRAM_BOT_TOKEN_TRADES || process.env.TELEGRAM_BOT_TOKEN;
 
 const OPTION_MULTIPLIER = 100; // standard equity option multiplier
 const SUCCESS_PROFIT_TARGET_USD = 50;
@@ -314,9 +319,6 @@ async function createTrade(req, res, next) {
       lastNotifiedPrice: Number.isFinite(entryPrice) ? Number(entryPrice.toFixed(2)) : null,
       lastMidPrice: null,
       lastQuoteAt: null,
-      telegramMessageId: null,
-      telegramChatId: null,
-      telegramSentAt: null,
       createdAt: nowTs,
       updatedAt: nowTs,
     };
@@ -349,31 +351,44 @@ async function createTrade(req, res, next) {
 
     void (async () => {
       try {
-        const sendResult = await sendNewTradeCard({
-          tradeId,
-          trade: {
-            ...payload,
-            openInterest: toFiniteNumberOrNull(openInterest),
-            volume: toFiniteNumberOrNull(volume),
-          },
-          caption: creationText,
-        });
-        if (sendResult?.ok && sendResult.telegramMessageId) {
-          await docRef.set(
-            {
-              telegramMessageId: sendResult.telegramMessageId,
-              telegramChatId: sendResult.telegramChatId || String(TELEGRAM_CHAT_ID_TRADES || ''),
-              telegramSentAt: getServerTimestamp(),
-              updatedAt: getServerTimestamp(),
-            },
-            { merge: true }
-          );
-          console.log(
-            `Telegram trade root message saved for ${tradeId} (message_id=${sendResult.telegramMessageId})`
-          );
+        if (ENABLE_TELEGRAM_IMAGE) {
+          try {
+            const card = await renderTradeCardPNG({
+              symbol: payload.symbol,
+              strike: payload.strike,
+              expiration: payload.expiration,
+              right: payload.right,
+              entryPrice: payload.entryPrice,
+              mid: payload.entryPrice,
+              openInterest: toFiniteNumberOrNull(openInterest),
+              volume: toFiniteNumberOrNull(volume),
+              pnlValue: 0,
+              pnlPct: 0,
+            });
+            await sendTelegramPhoto({
+              caption: creationText,
+              imageBuffer: card,
+              chatId: TELEGRAM_CHAT_ID_TRADES,
+              token: TELEGRAM_BOT_TOKEN_TRADES,
+            });
+            console.log(`Telegram photo sent (new trade) for ${tradeId}`);
+          } catch (photoErr) {
+            console.error(`Telegram image send failed (new trade) for ${tradeId}:`, photoErr.message);
+            await sendTelegramMessage(creationText, {
+              chatId: TELEGRAM_CHAT_ID_TRADES,
+              token: TELEGRAM_BOT_TOKEN_TRADES,
+            });
+            console.log(`Telegram text sent after photo fallback (new trade) for ${tradeId}`);
+          }
+        } else {
+          await sendTelegramMessage(creationText, {
+            chatId: TELEGRAM_CHAT_ID_TRADES,
+            token: TELEGRAM_BOT_TOKEN_TRADES,
+          });
+          console.log(`Telegram text sent (new trade) for ${tradeId}`);
         }
       } catch (err) {
-        console.error(`Telegram post-send persistence failed (new trade) for ${tradeId}:`, err.message);
+        console.error(`Telegram send failed (new trade) for ${tradeId}:`, err.message);
       }
       try {
         await db.collection('alerts').add({
@@ -775,10 +790,9 @@ async function updateStopLoss(req, res, next) {
       `📉 ${symbol} (${right})\n\n` +
       `⚠️ الخروج للحفاظ على رأس المال.\n` +
       `معوضين خير، والقادم أجمل بإذن الله. 🤲`;
-    sendTradeUpdateReply({
-      tradeId: id,
-      trade: result.data,
-      text: stopText,
+    sendTelegramMessage(stopText, {
+      chatId: TELEGRAM_CHAT_ID_TRADES,
+      token: TELEGRAM_BOT_TOKEN_TRADES,
     }).catch(() => {});
   } catch (err) {
     next(err);

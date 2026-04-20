@@ -1,6 +1,13 @@
 const { db, admin } = require('../database');
 const { getOptionQuote, getOptionContractStats, getFpssStatus } = require('../services/thetaClient');
-const { sendTradeUpdateReply } = require('../services/tradeTelegramNotifier');
+const { sendTelegramMessage, sendTelegramPhoto } = require('../services/telegramService');
+const { renderTradeCardPNG } = require('../services/cardRenderer');
+
+const ENABLE_TELEGRAM_IMAGE =
+  String(process.env.ENABLE_TELEGRAM_IMAGE || 'false').toLowerCase() === 'true';
+const TELEGRAM_CHAT_ID_TRADES = process.env.TELEGRAM_CHAT_ID_TRADES || process.env.TELEGRAM_CHAT_ID;
+const TELEGRAM_BOT_TOKEN_TRADES =
+  process.env.TELEGRAM_BOT_TOKEN_TRADES || process.env.TELEGRAM_BOT_TOKEN;
 
 const enabled = String(process.env.ENABLE_WATCHER).toLowerCase() === 'true';
 const intervalMs = Number(process.env.WATCH_INTERVAL_MS || process.env.PRICE_WATCH_INTERVAL_MS || 800);
@@ -281,24 +288,42 @@ async function processTrade(doc) {
     let stepAlertSent = false;
     if (shouldSendStepAlert) {
       try {
-        const stepSendResult = await sendTradeUpdateReply({
-          tradeId: doc.id,
-          trade: data,
-          text: stepText,
-          preferImage: true,
-          imageCaption: reachedFiftyNow ? stepText : '✨ تحديث العقد ✨',
-          imagePayload: {
-            symbol,
-            strike,
-            expiration,
-            right,
-            entryPrice: entry,
-            mid,
-            openInterest: toFiniteNumberOrNull(stats.openInterest),
-            volume: toFiniteNumberOrNull(stats.volume),
-          },
-        });
-        stepAlertSent = Boolean(stepSendResult?.ok);
+        if (ENABLE_TELEGRAM_IMAGE) {
+          try {
+            const cardBuffer = await renderTradeCardPNG({
+              symbol,
+              strike,
+              expiration,
+              right,
+              entryPrice: entry,
+              mid,
+              openInterest: toFiniteNumberOrNull(stats.openInterest),
+              volume: toFiniteNumberOrNull(stats.volume),
+              pnlValue: mid - entry,
+              pnlPct: entry ? ((mid - entry) / entry) * 100 : 0,
+            });
+            await sendTelegramPhoto({
+              caption: reachedFiftyNow ? stepText : '✨ تحديث العقد ✨',
+              imageBuffer: cardBuffer,
+              chatId: TELEGRAM_CHAT_ID_TRADES,
+              token: TELEGRAM_BOT_TOKEN_TRADES,
+            });
+            stepAlertSent = true;
+          } catch (photoErr) {
+            console.error('Telegram image send failed (watcher):', photoErr.message);
+            await sendTelegramMessage(stepText, {
+              chatId: TELEGRAM_CHAT_ID_TRADES,
+              token: TELEGRAM_BOT_TOKEN_TRADES,
+            });
+            stepAlertSent = true;
+          }
+        } else {
+          await sendTelegramMessage(stepText, {
+            chatId: TELEGRAM_CHAT_ID_TRADES,
+            token: TELEGRAM_BOT_TOKEN_TRADES,
+          });
+          stepAlertSent = true;
+        }
       } catch (err) {
         console.error('Telegram send failed (step update):', err.message);
       }
@@ -308,10 +333,9 @@ async function processTrade(doc) {
       try {
         // If 50$ is reached now, milestone text is already included in step alert caption.
         if (!(reachedFiftyNow && stepAlertSent)) {
-          await sendTradeUpdateReply({
-            tradeId: doc.id,
-            trade: data,
-            text: milestoneText,
+          await sendTelegramMessage(milestoneText, {
+            chatId: TELEGRAM_CHAT_ID_TRADES,
+            token: TELEGRAM_BOT_TOKEN_TRADES,
           });
         }
         updates.milestone50SentAt = getServerTimestamp();
