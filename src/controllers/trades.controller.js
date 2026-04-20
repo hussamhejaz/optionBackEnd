@@ -37,12 +37,17 @@ const OPEN_HIGH_PRICE_SANITY_MULTIPLIER =
     : 8;
 const createTradeWriteTimeoutRaw = Number(process.env.CREATE_TRADE_WRITE_TIMEOUT_MS || 60000);
 const createTradeWriteRecoveryRaw = Number(process.env.CREATE_TRADE_WRITE_RECOVERY_MS || 60000);
+const newTradeTelegramTimeoutRaw = Number(process.env.NEW_TRADE_TELEGRAM_TIMEOUT_MS || 15000);
 const CREATE_TRADE_WRITE_TIMEOUT_MS =
   Number.isFinite(createTradeWriteTimeoutRaw) ? createTradeWriteTimeoutRaw : 60000;
 const CREATE_TRADE_WRITE_RECOVERY_MS =
   Number.isFinite(createTradeWriteRecoveryRaw) && createTradeWriteRecoveryRaw > 0
     ? createTradeWriteRecoveryRaw
     : 30000;
+const NEW_TRADE_TELEGRAM_TIMEOUT_MS =
+  Number.isFinite(newTradeTelegramTimeoutRaw) && newTradeTelegramTimeoutRaw > 0
+    ? newTradeTelegramTimeoutRaw
+    : 15000;
 
 const collection = db.collection('trades');
 const reportsCollection = db.collection('reports');
@@ -212,6 +217,17 @@ function formatExpirationForCaption(expiration) {
   return `${d}-${m}-${y}`;
 }
 
+function buildNewTradeCreationText(trade = {}) {
+  return (
+    `✨ مقترح جديد 🚀\n\n` +
+    `🌟 ليست توصية للشراء او البيع 🌟\n\n` +
+    `🏢 الرمز: ${trade.symbol}\n` +
+    `🏷️ النوع: ${String(trade.right).toUpperCase()}\n` +
+    `🎯 السترايك: ${trade.strike}\n` +
+    `📅 التاريخ: ${formatExpirationForCaption(trade.expiration)}\n`
+  );
+}
+
 async function withTimeout(promise, ms, label) {
   if (!Number.isFinite(ms) || ms <= 0) return promise;
   let timeoutId;
@@ -226,6 +242,55 @@ async function withTimeout(promise, ms, label) {
     return await Promise.race([promise, timeout]);
   } finally {
     clearTimeout(timeoutId);
+  }
+}
+
+async function sendInitialTradeTelegram({ tradeId, trade, docRef }) {
+  const caption = buildNewTradeCreationText(trade);
+  try {
+    console.log(`Telegram new trade send started ${tradeId}`);
+    const sendResult = await withTimeout(
+      sendNewTradeCard({
+        tradeId,
+        trade: {
+          ...trade,
+          openInterest: toFiniteNumberOrNull(trade.openInterest),
+          volume: toFiniteNumberOrNull(trade.volume),
+        },
+        caption,
+      }),
+      NEW_TRADE_TELEGRAM_TIMEOUT_MS,
+      `new trade Telegram send ${tradeId}`
+    );
+
+    if (sendResult?.ok && sendResult.telegramMessageId) {
+      const telegramPatch = {
+        telegramMessageId: sendResult.telegramMessageId,
+        telegramChatId: sendResult.telegramChatId || String(TELEGRAM_CHAT_ID_TRADES || ''),
+        telegramSentAt: getServerTimestamp(),
+        updatedAt: getServerTimestamp(),
+      };
+      await docRef.set(telegramPatch, { merge: true });
+      console.log(
+        `Telegram trade root message saved for ${tradeId} (message_id=${sendResult.telegramMessageId})`
+      );
+      return {
+        ok: true,
+        telegramMessageId: sendResult.telegramMessageId,
+        telegramChatId: telegramPatch.telegramChatId,
+      };
+    }
+
+    if (sendResult && sendResult.ok === false) {
+      console.error(`Telegram send failed (new trade) for ${tradeId}:`, sendResult.error);
+      return { ok: false, error: sendResult.error || 'telegram send failed' };
+    }
+
+    console.error(`Telegram send failed (new trade) for ${tradeId}: no message_id returned`);
+    return { ok: false, error: 'telegram send returned no message_id' };
+  } catch (err) {
+    console.error(`Telegram send failed (new trade) for ${tradeId}:`, err.message);
+    return { ok: false, error: err.message };
   }
 }
 
@@ -251,7 +316,28 @@ async function createTrade(req, res, next) {
       'create trade precheck'
     );
     if (existing.exists) {
-      return res.status(200).json({ id: tradeId, ...existing.data(), reused: true });
+      const existingData = existing.data();
+      const existingTelegramMessageId = Number(existingData?.telegramMessageId);
+      let telegramResult = null;
+      if (!Number.isInteger(existingTelegramMessageId)) {
+        telegramResult = await sendInitialTradeTelegram({
+          tradeId,
+          trade: existingData,
+          docRef,
+        });
+      }
+      return res.status(200).json({
+        id: tradeId,
+        ...existingData,
+        ...(telegramResult?.ok
+          ? {
+              telegramMessageId: telegramResult.telegramMessageId,
+              telegramChatId: telegramResult.telegramChatId,
+            }
+          : {}),
+        reused: true,
+        ...(telegramResult ? { telegramNewTradeSend: telegramResult.ok } : {}),
+      });
     }
 
     // Fetch live quote to set entryPrice automatically.
@@ -336,49 +422,28 @@ async function createTrade(req, res, next) {
       console.error(`create trade write timeout ${tradeId}: ${timeoutError.message}`);
       throw timeoutError;
     }
+    const telegramResult = await sendInitialTradeTelegram({
+      tradeId,
+      trade: payload,
+      docRef,
+    });
+
     if (res.headersSent || res.writableEnded) {
       return;
     }
-    res.status(201).json({ id: tradeId, ...payload });
-
-    const creationText =
-      `✨ مقترح جديد 🚀\n\n` +
-      `🌟 ليست توصية للشراء او البيع 🌟\n\n` +
-      `🏢 الرمز: ${payload.symbol}\n` +
-      `🏷️ النوع: ${String(payload.right).toUpperCase()}\n` +
-      `🎯 السترايك: ${payload.strike}\n` +
-      `📅 التاريخ: ${formatExpirationForCaption(payload.expiration)}\n`;
+    res.status(201).json({
+      id: tradeId,
+      ...payload,
+      ...(telegramResult?.ok
+        ? {
+            telegramMessageId: telegramResult.telegramMessageId,
+            telegramChatId: telegramResult.telegramChatId,
+          }
+        : {}),
+      telegramNewTradeSend: telegramResult.ok,
+    });
 
     void (async () => {
-      try {
-        const sendResult = await sendNewTradeCard({
-          tradeId,
-          trade: {
-            ...payload,
-            openInterest: toFiniteNumberOrNull(openInterest),
-            volume: toFiniteNumberOrNull(volume),
-          },
-          caption: creationText,
-        });
-        if (sendResult?.ok && sendResult.telegramMessageId) {
-          await docRef.set(
-            {
-              telegramMessageId: sendResult.telegramMessageId,
-              telegramChatId: sendResult.telegramChatId || String(TELEGRAM_CHAT_ID_TRADES || ''),
-              telegramSentAt: getServerTimestamp(),
-              updatedAt: getServerTimestamp(),
-            },
-            { merge: true }
-          );
-          console.log(
-            `Telegram trade root message saved for ${tradeId} (message_id=${sendResult.telegramMessageId})`
-          );
-        } else if (sendResult && sendResult.ok === false) {
-          console.error(`Telegram send failed (new trade) for ${tradeId}:`, sendResult.error);
-        }
-      } catch (err) {
-        console.error(`Telegram post-send persistence failed (new trade) for ${tradeId}:`, err.message);
-      }
       try {
         await db.collection('alerts').add({
           tradeId,

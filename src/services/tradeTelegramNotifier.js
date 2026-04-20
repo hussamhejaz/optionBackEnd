@@ -144,17 +144,19 @@ async function ensureTradeTelegramRootMessage({ tradeId, trade = {}, chatId }) {
 async function sendNewTradeCard({ tradeId, trade, caption }) {
   try {
     const chatId = resolveTradeChatId(trade);
-    try {
-      const cardBuffer = await renderTradeCardPNG(buildTradeCardPayload(trade));
-      const response = await sendTelegramPhoto({
-        caption,
-        imageBuffer: cardBuffer,
-        chatId,
-        token: TELEGRAM_BOT_TOKEN_TRADES,
-      });
-      return { ok: true, ...extractTelegramMeta(response, chatId) };
-    } catch (photoErr) {
-      console.error(`Telegram image send failed (new trade ${tradeId}):`, photoErr.message);
+    if (ENABLE_TELEGRAM_IMAGE) {
+      try {
+        const cardBuffer = await renderTradeCardPNG(buildTradeCardPayload(trade));
+        const response = await sendTelegramPhoto({
+          caption,
+          imageBuffer: cardBuffer,
+          chatId,
+          token: TELEGRAM_BOT_TOKEN_TRADES,
+        });
+        return { ok: true, ...extractTelegramMeta(response, chatId) };
+      } catch (photoErr) {
+        console.error(`Telegram image send failed (new trade ${tradeId}):`, photoErr.message);
+      }
     }
 
     const response = await sendTelegramMessage(caption, {
