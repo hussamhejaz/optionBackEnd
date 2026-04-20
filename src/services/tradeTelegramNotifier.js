@@ -60,6 +60,25 @@ function resolveTradeChatId(trade = {}) {
   return TELEGRAM_CHAT_ID_TRADES;
 }
 
+async function persistTradeTelegramRootMeta(tradeId, meta = {}) {
+  if (!tradeId) return;
+  const messageId = Number(meta.telegramMessageId);
+  const chatId = String(meta.telegramChatId || '').trim();
+  if (!Number.isInteger(messageId)) return;
+  try {
+    await db.collection('trades').doc(tradeId).set(
+      {
+        telegramMessageId: messageId,
+        ...(chatId ? { telegramChatId: chatId } : {}),
+        telegramSentAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    console.error(`Failed to persist telegram root metadata (${tradeId}):`, err.message);
+  }
+}
+
 async function sendNewTradeCard({ tradeId, trade, caption }) {
   try {
     const chatId = resolveTradeChatId(trade);
@@ -140,7 +159,11 @@ async function sendTradeUpdateReply({
 
   try {
     const response = await sendOnce(replyToMessageId);
-    return { ok: true, replied: replyToMessageId !== null, ...extractTelegramMeta(response, chatId) };
+    const meta = extractTelegramMeta(response, chatId);
+    if (replyToMessageId === null) {
+      await persistTradeTelegramRootMeta(tradeId, meta);
+    }
+    return { ok: true, replied: replyToMessageId !== null, ...meta };
   } catch (err) {
     const hasReplyTarget = replyToMessageId !== null;
     const contextMessage = hasReplyTarget
@@ -152,7 +175,10 @@ async function sendTradeUpdateReply({
         chatId,
         token: TELEGRAM_BOT_TOKEN_TRADES,
       });
-      return { ok: true, replied: false, fallbackUsed: true, ...extractTelegramMeta(fallbackResponse, chatId) };
+      const fallbackMeta = extractTelegramMeta(fallbackResponse, chatId);
+      // Reply target may be stale/missing; adopt fallback message as new root for future replies.
+      await persistTradeTelegramRootMeta(tradeId, fallbackMeta);
+      return { ok: true, replied: false, fallbackUsed: true, ...fallbackMeta };
     } catch (fallbackErr) {
       console.error(`Telegram fallback send failed (trade ${tradeId}):`, fallbackErr.message);
       return { ok: false, error: fallbackErr.message };
