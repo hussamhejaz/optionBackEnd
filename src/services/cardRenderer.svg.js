@@ -27,6 +27,12 @@ function formatNum(n, decimals = 2) {
   return Number(n).toFixed(decimals);
 }
 
+function formatPnlLineValue(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return '--';
+  return num.toFixed(2);
+}
+
 function formatCompactCount(n) {
   const num = Number(n);
   if (!Number.isFinite(num) || num <= 0) return '--';
@@ -143,7 +149,7 @@ function bodySvg({
   return `
     <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${bg}"/>
     <text x="${leftCenterX}" y="${priceY}" fill="${priceColor}" font-size="92" font-weight="700" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${formatNum(price)}</text>
-    <text x="${leftCenterX}" y="${pnlY}" fill="${deltaColor}" font-size="32" font-weight="600" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${formatNum(pnlValue, 2)} $  ${formatNum(pnlPct)}%</text>
+    <text x="${leftCenterX}" y="${pnlY}" fill="${deltaColor}" font-size="32" font-weight="600" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${formatPnlLineValue(pnlValue)} $  ${formatNum(pnlPct)}%</text>
     <text x="${labelX}" y="${rowY}" fill="${text}" font-size="38" font-weight="500" font-family="DejaVu Sans, Arial, sans-serif">Mid :</text>
     <text x="${labelX}" y="${rowY + gap}" fill="${text}" font-size="38" font-weight="500" font-family="DejaVu Sans, Arial, sans-serif">Open Int :</text>
     <text x="${labelX}" y="${rowY + gap * 2}" fill="${text}" font-size="38" font-weight="500" font-family="DejaVu Sans, Arial, sans-serif">Vol :</text>

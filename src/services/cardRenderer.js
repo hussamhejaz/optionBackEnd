@@ -27,6 +27,12 @@ function formatNum(n, decimals = 2) {
   return Number(n).toFixed(decimals);
 }
 
+function formatPnlLineValue(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return '--';
+  return num.toFixed(2);
+}
+
 function formatCompactCount(n) {
   const num = Number(n);
   if (!Number.isFinite(num) || num <= 0) return '--';
@@ -190,7 +196,7 @@ function drawBodyPanel(ctx, {
 
   ctx.fillStyle = deltaColor;
   ctx.font = '600 32px Sans';
-  ctx.fillText(`${formatNum(pnlValue, 2)} $  ${formatNum(pnlPct)}%`, leftCenterX, pnlY);
+  ctx.fillText(`${formatPnlLineValue(pnlValue)} $  ${formatNum(pnlPct)}%`, leftCenterX, pnlY);
   ctx.textAlign = 'left';
 
   // ===== Right stats =====
