@@ -294,8 +294,6 @@ async function processTrade(doc) {
             right,
             entryPrice: entry,
             mid,
-            pnlValue: mid - entry,
-            pnlPct: entry ? ((mid - entry) / entry) * 100 : 0,
             openInterest: toFiniteNumberOrNull(stats.openInterest),
             volume: toFiniteNumberOrNull(stats.volume),
           },
