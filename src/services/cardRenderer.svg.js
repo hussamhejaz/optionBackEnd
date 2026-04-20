@@ -209,6 +209,27 @@ function footerSvg({ x, y, width, pnlValue, pnlPct, expiration, right, logoDataU
   `;
 }
 
+function resolvePnlMetrics({ entryPrice, mid, pnlValue, pnlPct }) {
+  const entry = Number(entryPrice);
+  const current = Number(mid);
+  const directPnlValue = Number(pnlValue);
+  const directPnlPct = Number(pnlPct);
+
+  const derivedPnlValue =
+    Number.isFinite(entry) && Number.isFinite(current)
+      ? (current - entry)
+      : 0;
+  const resolvedPnlValue = Number.isFinite(directPnlValue) ? directPnlValue : derivedPnlValue;
+
+  const derivedPnlPct =
+    Number.isFinite(entry) && Number.isFinite(current) && entry !== 0
+      ? (((current - entry) / entry) * 100)
+      : 0;
+  const resolvedPnlPct = Number.isFinite(directPnlPct) ? directPnlPct : derivedPnlPct;
+
+  return { pnlValue: resolvedPnlValue, pnlPct: resolvedPnlPct };
+}
+
 async function renderTradeCardPNG({
   symbol,
   strike,
@@ -223,6 +244,7 @@ async function renderTradeCardPNG({
   logoBuffer,
   variant = 'default',
 }) {
+  const resolvedPnl = resolvePnlMetrics({ entryPrice, mid, pnlValue, pnlPct });
   const isWinningAd = variant === 'winning-ad';
   const width = 1080;
   const height = isWinningAd ? 1140 : 600;
@@ -246,19 +268,19 @@ async function renderTradeCardPNG({
     body += headerSvg({ x: cardX, y, width: cardW, symbol, strike, expiration, right, logoDataUrl });
     y += 150;
     body += bodySvg({
-      x: cardX, y, width: cardW, height: 360, price: mid, pnlValue, pnlPct, mid,
+      x: cardX, y, width: cardW, height: 360, price: mid, pnlValue: resolvedPnl.pnlValue, pnlPct: resolvedPnl.pnlPct, mid,
       openInterest, volume, profitMode: true, flagsStyle: 'raised', flagId: 'current',
     });
     y += 360;
     body += `<line x1="${cardX}" y1="${y}" x2="${cardX + cardW}" y2="${y}" stroke="${accent}" stroke-width="4"/>`;
-    body += footerSvg({ x: cardX, y, width: cardW, pnlValue, pnlPct, expiration, right, logoDataUrl });
+    body += footerSvg({ x: cardX, y, width: cardW, pnlValue: resolvedPnl.pnlValue, pnlPct: resolvedPnl.pnlPct, expiration, right, logoDataUrl });
   } else {
     const headerH = 150;
     const bodyH = height - cardPad * 2 - headerH;
     body += headerSvg({ x: cardX, y: cardY, width: cardW, symbol, strike, expiration, right, logoDataUrl });
     body += bodySvg({
-      x: cardX, y: cardY + headerH, width: cardW, height: bodyH, price: mid, pnlValue, pnlPct, mid,
-      openInterest, volume, profitMode: Number(pnlValue) > 0, flagsStyle: 'raised', flagId: 'default',
+      x: cardX, y: cardY + headerH, width: cardW, height: bodyH, price: mid, pnlValue: resolvedPnl.pnlValue, pnlPct: resolvedPnl.pnlPct, mid,
+      openInterest, volume, profitMode: Number(resolvedPnl.pnlValue) > 0, flagsStyle: 'raised', flagId: 'default',
     });
   }
 
