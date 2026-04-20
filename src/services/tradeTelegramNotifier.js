@@ -79,6 +79,43 @@ async function persistTradeTelegramRootMeta(tradeId, meta = {}) {
   }
 }
 
+function buildTradeRootText(tradeId, trade = {}) {
+  return (
+    `📌 Trade Thread Root\n` +
+    `Symbol: ${String(trade.symbol || '').toUpperCase()}\n` +
+    `Type: ${String(trade.right || '').toUpperCase()}\n` +
+    `Strike: ${trade.strike ?? '-'}\n` +
+    `Exp: ${trade.expiration ?? '-'}\n` +
+    `TradeId: ${tradeId}`
+  );
+}
+
+async function ensureTradeTelegramRootMessage({ tradeId, trade = {}, chatId }) {
+  const existingMessageId = Number(trade.telegramMessageId);
+  if (Number.isInteger(existingMessageId)) {
+    return {
+      ok: true,
+      telegramMessageId: existingMessageId,
+      telegramChatId: String(trade.telegramChatId || chatId || ''),
+      reused: true,
+    };
+  }
+  if (!tradeId) return { ok: false, error: 'missing tradeId' };
+
+  try {
+    const response = await sendTelegramMessage(buildTradeRootText(tradeId, trade), {
+      chatId,
+      token: TELEGRAM_BOT_TOKEN_TRADES,
+    });
+    const meta = extractTelegramMeta(response, chatId);
+    await persistTradeTelegramRootMeta(tradeId, meta);
+    return { ok: true, ...meta, reused: false };
+  } catch (err) {
+    console.error(`Failed to create Telegram root message (${tradeId}):`, err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
 async function sendNewTradeCard({ tradeId, trade, caption }) {
   try {
     const chatId = resolveTradeChatId(trade);
@@ -134,9 +171,29 @@ async function sendTradeUpdateReply({
     }
   }
 
-  const replyToRaw = Number(resolvedTrade?.telegramMessageId);
-  const replyToMessageId = Number.isInteger(replyToRaw) ? replyToRaw : null;
   const chatId = resolveTradeChatId(resolvedTrade);
+  let replyToRaw = Number(resolvedTrade?.telegramMessageId);
+  let replyToMessageId = Number.isInteger(replyToRaw) ? replyToRaw : null;
+
+  // Auto-heal legacy/open trades that never stored a root Telegram message.
+  // We create one root message, persist its message_id, then reply to it.
+  if (replyToMessageId === null && tradeId) {
+    const rootResult = await ensureTradeTelegramRootMessage({
+      tradeId,
+      trade: resolvedTrade,
+      chatId,
+    });
+    const seededReplyRaw = Number(rootResult?.telegramMessageId);
+    if (Number.isInteger(seededReplyRaw)) {
+      replyToRaw = seededReplyRaw;
+      replyToMessageId = seededReplyRaw;
+      resolvedTrade = {
+        ...resolvedTrade,
+        telegramMessageId: seededReplyRaw,
+        telegramChatId: rootResult.telegramChatId || resolvedTrade.telegramChatId || chatId,
+      };
+    }
+  }
 
   async function sendOnce(replyTo) {
     if (preferImage && ENABLE_TELEGRAM_IMAGE) {
@@ -187,6 +244,7 @@ async function sendTradeUpdateReply({
 }
 
 module.exports = {
+  ensureTradeTelegramRootMessage,
   sendNewTradeCard,
   sendTradeUpdateReply,
 };
