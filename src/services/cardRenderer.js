@@ -27,6 +27,14 @@ function formatNum(n, decimals = 2) {
   return Number(n).toFixed(decimals);
 }
 
+function formatPnlDollars(n) {
+  if (!Number.isFinite(n)) return '--';
+  return Number(n)
+    .toFixed(2)
+    .replace(/(\.\d*?[1-9])0+$/u, '$1')
+    .replace(/\.0+$/u, '');
+}
+
 function formatCompactCount(n) {
   const num = Number(n);
   if (!Number.isFinite(num) || num <= 0) return '--';
@@ -190,7 +198,7 @@ function drawBodyPanel(ctx, {
 
   ctx.fillStyle = deltaColor;
   ctx.font = '600 32px Sans';
-  ctx.fillText(`${formatNum(pnlValue)} $  ${formatNum(pnlPct)}%`, leftCenterX, pnlY);
+  ctx.fillText(`${formatPnlDollars(pnlValue)} $  ${formatNum(pnlPct)}%`, leftCenterX, pnlY);
   ctx.textAlign = 'left';
 
   // ===== Right stats =====

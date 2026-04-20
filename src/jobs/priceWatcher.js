@@ -299,8 +299,8 @@ async function processTrade(doc) {
               mid,
               openInterest: toFiniteNumberOrNull(stats.openInterest),
               volume: toFiniteNumberOrNull(stats.volume),
-              pnlValue: mid - entry,
-              pnlPct: entry ? ((mid - entry) / entry) * 100 : 0,
+              pnlValue: pnlAmount,
+              pnlPct: pnlPercent,
             });
             await sendTelegramPhoto({
               caption: reachedFiftyNow ? stepText : '✨ تحديث العقد ✨',
