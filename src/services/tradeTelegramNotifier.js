@@ -107,7 +107,8 @@ async function sendTradeUpdateReply({
     try {
       const latest = await db.collection('trades').doc(tradeId).get();
       if (latest.exists) {
-        resolvedTrade = { ...latest.data(), ...resolvedTrade };
+        // Prefer the newest persisted values (telegramMessageId/chatId) from DB.
+        resolvedTrade = { ...resolvedTrade, ...latest.data() };
       }
     } catch (readErr) {
       console.error(`Failed to fetch latest trade for Telegram reply (${tradeId}):`, readErr.message);
