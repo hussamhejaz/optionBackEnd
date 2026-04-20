@@ -27,6 +27,26 @@ function formatNum(n, decimals = 2) {
   return Number(n).toFixed(decimals);
 }
 
+function trimTrailingZeros(numText) {
+  return String(numText).replace(/(\.\d*?[1-9])0+$/u, '$1').replace(/\.0+$/u, '');
+}
+
+function formatPriceAdaptive(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return '--';
+  const abs = Math.abs(num);
+  let decimals = 2;
+  if (abs >= 1000) decimals = 0;
+  else if (abs >= 100) decimals = 1;
+  return trimTrailingZeros(num.toFixed(decimals));
+}
+
+function formatPercentAdaptive(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return '--';
+  return trimTrailingZeros(num.toFixed(2));
+}
+
 function formatCompactCount(n) {
   const num = Number(n);
   if (!Number.isFinite(num) || num <= 0) return '--';
@@ -34,6 +54,32 @@ function formatCompactCount(n) {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
   return String(Math.round(num));
+}
+
+function drawAutoFitText(ctx, {
+  textValue,
+  x,
+  y,
+  maxWidth,
+  maxFontSize,
+  minFontSize = 16,
+  weight = '600',
+  align = 'left',
+  color = text,
+}) {
+  const safeText = String(textValue ?? '');
+  const previousAlign = ctx.textAlign;
+  ctx.textAlign = align;
+  ctx.fillStyle = color;
+
+  let size = maxFontSize;
+  while (size > minFontSize) {
+    ctx.font = `${weight} ${size}px Sans`;
+    if (ctx.measureText(safeText).width <= maxWidth) break;
+    size -= 1;
+  }
+  ctx.fillText(safeText, x, y);
+  ctx.textAlign = previousAlign;
 }
 
 function drawCandleIcon(ctx, x, y, scale = 1) {
@@ -114,9 +160,18 @@ function drawHeader(ctx, { x, y, width, symbol, strike, expiration, right, logo 
   ctx.fillStyle = panel;
   ctx.fillRect(x, y, width, headerH);
 
-  ctx.fillStyle = text;
-  ctx.font = '600 46px Sans';
-  ctx.fillText(`${symbol || ''} (${formatNum(strike, 1)})`, x + 56, y + 65);
+  const headerTitle = `${symbol || ''} (${formatPriceAdaptive(strike)})`;
+  drawAutoFitText(ctx, {
+    textValue: headerTitle,
+    x: x + 56,
+    y: y + 65,
+    maxWidth: width - 520,
+    maxFontSize: 46,
+    minFontSize: 28,
+    weight: '600',
+    align: 'left',
+    color: text,
+  });
 
   ctx.font = '500 36px Sans';
   ctx.fillStyle = dim;
@@ -183,15 +238,31 @@ function drawBodyPanel(ctx, {
   const priceY = compact ? (y + Math.round(height * 0.38)) : (y + Math.floor(height / 2) - 10);
   const pnlY = priceY + Math.round(height * 0.12);
 
-  ctx.fillStyle = priceColor;
-  ctx.font = '700 92px Sans';
-  ctx.textAlign = 'center';
-  ctx.fillText(formatNum(price), leftCenterX, priceY);
+  const priceText = formatPriceAdaptive(price);
+  const pnlText = `${formatPriceAdaptive(pnlValue)} $  ${formatPercentAdaptive(pnlPct)}%`;
+  drawAutoFitText(ctx, {
+    textValue: priceText,
+    x: leftCenterX,
+    y: priceY,
+    maxWidth: Math.floor(width * 0.42),
+    maxFontSize: 92,
+    minFontSize: 52,
+    weight: '700',
+    align: 'center',
+    color: priceColor,
+  });
 
-  ctx.fillStyle = deltaColor;
-  ctx.font = '600 32px Sans';
-  ctx.fillText(`${formatNum(pnlValue)} $  ${formatNum(pnlPct)}%`, leftCenterX, pnlY);
-  ctx.textAlign = 'left';
+  drawAutoFitText(ctx, {
+    textValue: pnlText,
+    x: leftCenterX,
+    y: pnlY,
+    maxWidth: Math.floor(width * 0.46),
+    maxFontSize: 32,
+    minFontSize: 20,
+    weight: '600',
+    align: 'center',
+    color: deltaColor,
+  });
 
   // ===== Right stats =====
   ctx.fillStyle = text;
@@ -214,7 +285,7 @@ function drawBodyPanel(ctx, {
   const volNum = Number(volume);
 
   ctx.textAlign = 'right';
-  ctx.fillText(formatNum(mid), valueX, rowY);
+  ctx.fillText(formatPriceAdaptive(mid), valueX, rowY);
   ctx.fillText(formatCompactCount(oi), valueX, rowY + gap);
   ctx.fillText(formatCompactCount(volNum), valueX, rowY + gap * 2);
   ctx.textAlign = 'left';
@@ -240,10 +311,18 @@ function drawFooter(ctx, { x, y, width, pnlValue, pnlPct, expiration, right, log
   ctx.fillStyle = panel;
   ctx.fillRect(x, y, width, footerH);
 
-  ctx.fillStyle = green;
-  ctx.font = '700 50px Sans';
-  ctx.textAlign = 'center';
-  ctx.fillText(`${formatNum(pnlValue, 0)}$| ${formatNum(pnlPct)}%`, leftCenterX, y + 66);
+  const footerPnlText = `${formatPriceAdaptive(pnlValue)}$| ${formatPercentAdaptive(pnlPct)}%`;
+  drawAutoFitText(ctx, {
+    textValue: footerPnlText,
+    x: leftCenterX,
+    y: y + 66,
+    maxWidth: Math.floor(width * 0.46),
+    maxFontSize: 50,
+    minFontSize: 28,
+    weight: '700',
+    align: 'center',
+    color: green,
+  });
 
   ctx.fillStyle = dim;
   ctx.font = '500 36px Sans';

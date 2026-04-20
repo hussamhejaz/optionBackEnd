@@ -27,6 +27,26 @@ function formatNum(n, decimals = 2) {
   return Number(n).toFixed(decimals);
 }
 
+function trimTrailingZeros(numText) {
+  return String(numText).replace(/(\.\d*?[1-9])0+$/u, '$1').replace(/\.0+$/u, '');
+}
+
+function formatPriceAdaptive(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return '--';
+  const abs = Math.abs(num);
+  let decimals = 2;
+  if (abs >= 1000) decimals = 0;
+  else if (abs >= 100) decimals = 1;
+  return trimTrailingZeros(num.toFixed(decimals));
+}
+
+function formatPercentAdaptive(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return '--';
+  return trimTrailingZeros(num.toFixed(2));
+}
+
 function formatCompactCount(n) {
   const num = Number(n);
   if (!Number.isFinite(num) || num <= 0) return '--';
@@ -34,6 +54,14 @@ function formatCompactCount(n) {
   if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `${(num / 1_000).toFixed(2)}K`;
   return String(Math.round(num));
+}
+
+function fitFontSizeByLength(value, baseSize, minSize, targetLen) {
+  const textValue = String(value ?? '');
+  if (!textValue) return baseSize;
+  const ratio = targetLen / Math.max(textValue.length, 1);
+  const nextSize = Math.floor(baseSize * Math.min(1, ratio));
+  return Math.max(minSize, nextSize);
 }
 
 function escapeXml(s) {
@@ -107,9 +135,11 @@ function headerSvg({ x, y, width, symbol, strike, expiration, right, logoDataUrl
   const dateText = formatDate(expiration);
   const rightText = String(right || '').toLowerCase();
   const rightColor = rightText === 'put' ? red : green;
+  const headerTitle = `${symbol || ''} (${formatPriceAdaptive(strike)})`;
+  const headerTitleFontSize = fitFontSizeByLength(headerTitle, 46, 28, 18);
   return `
     <rect x="${x}" y="${y}" width="${width}" height="150" fill="${panel}"/>
-    <text x="${x + 56}" y="${y + 65}" fill="${text}" font-size="46" font-weight="600" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(symbol || '')} (${formatNum(strike, 1)})</text>
+    <text x="${x + 56}" y="${y + 65}" fill="${text}" font-size="${headerTitleFontSize}" font-weight="600" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(headerTitle)}</text>
     <text x="${x + 56}" y="${y + 118}" fill="${dim}" font-size="36" font-weight="500" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(dateText)} </text>
     <text x="${x + 56 + Math.max(0, dateText.length * 20)}" y="${y + 118}" fill="${rightColor}" font-size="36" font-weight="500" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(rightText)}</text>
     ${candleSvg(x + width / 2 - 48, y + 45, 0.75)}
@@ -140,14 +170,19 @@ function bodySvg({
   const flagR = isRaised ? 20 : 22;
   const gapX = isRaised ? 30 : 32;
   const fy = isRaised ? (y + height - 120) : (y + height - 55);
+  const priceText = formatPriceAdaptive(price);
+  const pnlText = `${formatPriceAdaptive(pnlValue)} $  ${formatPercentAdaptive(pnlPct)}%`;
+  const priceFontSize = fitFontSizeByLength(priceText, 92, 52, 7);
+  const pnlFontSize = fitFontSizeByLength(pnlText, 32, 20, 18);
+  const midText = formatPriceAdaptive(mid);
   return `
     <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${bg}"/>
-    <text x="${leftCenterX}" y="${priceY}" fill="${priceColor}" font-size="92" font-weight="700" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${formatNum(price)}</text>
-    <text x="${leftCenterX}" y="${pnlY}" fill="${deltaColor}" font-size="32" font-weight="600" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${formatNum(pnlValue)} $  ${formatNum(pnlPct)}%</text>
+    <text x="${leftCenterX}" y="${priceY}" fill="${priceColor}" font-size="${priceFontSize}" font-weight="700" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${priceText}</text>
+    <text x="${leftCenterX}" y="${pnlY}" fill="${deltaColor}" font-size="${pnlFontSize}" font-weight="600" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${pnlText}</text>
     <text x="${labelX}" y="${rowY}" fill="${text}" font-size="38" font-weight="500" font-family="DejaVu Sans, Arial, sans-serif">Mid :</text>
     <text x="${labelX}" y="${rowY + gap}" fill="${text}" font-size="38" font-weight="500" font-family="DejaVu Sans, Arial, sans-serif">Open Int :</text>
     <text x="${labelX}" y="${rowY + gap * 2}" fill="${text}" font-size="38" font-weight="500" font-family="DejaVu Sans, Arial, sans-serif">Vol :</text>
-    <text x="${valueX}" y="${rowY}" fill="${text}" font-size="38" font-weight="500" text-anchor="end" font-family="DejaVu Sans, Arial, sans-serif">${formatNum(mid)}</text>
+    <text x="${valueX}" y="${rowY}" fill="${text}" font-size="38" font-weight="500" text-anchor="end" font-family="DejaVu Sans, Arial, sans-serif">${midText}</text>
     <text x="${valueX}" y="${rowY + gap}" fill="${text}" font-size="38" font-weight="500" text-anchor="end" font-family="DejaVu Sans, Arial, sans-serif">${formatCompactCount(oi)}</text>
     <text x="${valueX}" y="${rowY + gap * 2}" fill="${text}" font-size="38" font-weight="500" text-anchor="end" font-family="DejaVu Sans, Arial, sans-serif">${formatCompactCount(volNum)}</text>
     ${usFlagSvg(leftCenterX - gapX, fy, flagR, `${flagId}-us`)}
@@ -160,9 +195,11 @@ function footerSvg({ x, y, width, pnlValue, pnlPct, expiration, right, logoDataU
   const dateText = formatDate(expiration);
   const rightText = String(right || '').toLowerCase();
   const rightColor = rightText === 'put' ? red : green;
+  const footerPnlText = `${formatPriceAdaptive(pnlValue)}$| ${formatPercentAdaptive(pnlPct)}%`;
+  const footerPnlFontSize = fitFontSizeByLength(footerPnlText, 50, 28, 16);
   return `
     <rect x="${x}" y="${y}" width="${width}" height="125" fill="${panel}"/>
-    <text x="${leftCenterX}" y="${y + 66}" fill="${green}" font-size="50" font-weight="700" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${formatNum(pnlValue, 0)}$| ${formatNum(pnlPct)}%</text>
+    <text x="${leftCenterX}" y="${y + 66}" fill="${green}" font-size="${footerPnlFontSize}" font-weight="700" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif">${footerPnlText}</text>
     <text x="${leftCenterX - 20}" y="${y + 112}" fill="${dim}" font-size="36" font-weight="500" text-anchor="end" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(dateText)} </text>
     <text x="${leftCenterX - 18}" y="${y + 112}" fill="${rightColor}" font-size="36" font-weight="500" text-anchor="start" font-family="DejaVu Sans, Arial, sans-serif">${escapeXml(rightText)}</text>
     ${candleSvg(x + width / 2 - 42, y + 32, 0.72)}
